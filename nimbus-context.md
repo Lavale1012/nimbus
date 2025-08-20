@@ -1,3 +1,4 @@
+
 # Nimbus CLI — Project Context & Initial Implementation Scope (with Sections & Boxes)
 
 Nimbus CLI is a cross-platform **command-line interface** for cloud file storage and management written in **Go**. Data is organized hierarchically as:

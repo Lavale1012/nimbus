@@ -49,15 +49,15 @@
 - [ ] CLI project setup with Cobra framework
 - [ ] Configuration and API client setup
 - [ ] Core commands:
-  - `nimbus whoami` - Display current user
-  - `nimbus section create <name>` - Create section
-  - `nimbus section ls` - List sections
-  - `nimbus box create <name> --section <section>` - Create box
-  - `nimbus box ls --section <section>` - List boxes
-  - `nimbus ls <path>` - List contents at path
-  - `nimbus mkdir <path>` - Create folder
-  - `nimbus upload <file> <path>` - Upload file
-  - `nimbus download <path> -o <output>` - Download file
+  - `nim whoami` - Display current user
+  - `nim new section <name>` - Create section
+  - `nim section ls` - List sections
+  - `nim new box <name> --section <section>` - Create box
+  - `nim box ls --section <section>` - List boxes
+  - `nim ls <path>` - List contents at path
+  - `nim mkdir <path>` - Create folder
+  - `nim send <file> <path>` - Upload file
+  - `nim grab <path> -o <output>` - Download file
 - [ ] Path parsing and validation (`/Section/Box:/folder/path` format)
 - [ ] HTTP client for API communication
 - [ ] File transfer logic for pre-signed URLs
@@ -117,10 +117,10 @@
 - [ ] Permission levels (read, write, admin)
 
 ### CLI Sharing Commands
-- [ ] `nimbus share create <path> --user <email> --permission <level>`
-- [ ] `nimbus share ls <path>` - List active shares
-- [ ] `nimbus share revoke <share-id>`
-- [ ] `nimbus share link <path> --expires <duration>`
+- [ ] `nim share create <path> --user <email> --permission <level>`
+- [ ] `nim share ls <path>` - List active shares
+- [ ] `nim share revoke <share-id>`
+- [ ] `nim share link <path> --expires <duration>`
 
 ### Security
 - [ ] Share link generation and validation
