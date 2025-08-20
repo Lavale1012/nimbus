@@ -6,7 +6,7 @@ import (
 	"github.com/nimbus/api/routes"
 )
 
-func InitServer() (*gin.Engine, error) {
+func InitServer() error {
 	r := gin.Default()
 	r.Use(gin.Recovery())
 	r.Use(cors.Default())
@@ -16,5 +16,5 @@ func InitServer() (*gin.Engine, error) {
 	routes.InitBoxRoutes(r)
 	routes.InitSectionRoutes(r)
 	r.Run("localhost:8080")
-	return r, nil
+	return nil
 }
