@@ -1,25 +1,19 @@
-package s3
+package s3Operations
 
 import (
 	"context"
-	"os"
+	"io"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-func PutObject(ctx context.Context, s3c *s3.Client, bucket string, key string, filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+func PutObject(ctx context.Context, s3c *s3.Client, Bucket string, key string, contentType string, file io.Reader) error {
 
-	_, err = s3c.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      &bucket,
+	_, err := s3c.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &Bucket,
 		Key:         &key,
 		Body:        file,
-		ContentType: aws.String("application/octet-stream"),
+		ContentType: &contentType,
 	})
 	return err
 }

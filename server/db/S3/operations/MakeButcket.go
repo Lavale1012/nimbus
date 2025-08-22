@@ -1,4 +1,4 @@
-package s3
+package s3Operations
 
 import (
 	"context"
@@ -11,7 +11,7 @@ func MakeBucket(ctx context.Context, s3c *s3.Client, bucket string, region strin
 	input := &s3.CreateBucketInput{
 		Bucket: &bucket,
 	}
-	
+
 	// Only add CreateBucketConfiguration for regions other than us-east-1
 	// LocalStack requires this for proper region handling
 	if region != "us-east-1" {
@@ -19,7 +19,7 @@ func MakeBucket(ctx context.Context, s3c *s3.Client, bucket string, region strin
 			LocationConstraint: types.BucketLocationConstraint(region),
 		}
 	}
-	
+
 	_, err := s3c.CreateBucket(ctx, input)
 	return err
 }

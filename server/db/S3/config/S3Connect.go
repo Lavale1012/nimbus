@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+var S3 *s3.Client
+
 func ConnectToS3(ctx context.Context, region string) (*s3.Client, error) {
 	// Implementation for connecting to S3
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
