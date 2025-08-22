@@ -21,7 +21,7 @@ func InitServer() error {
 
 	ctx := context.Background()
 
-	region := "us-east-2"
+	region := "us-east-2" //TODO: function will get this data
 
 	s3, err := aws.ConnectToS3(ctx, region)
 	if err != nil {
@@ -33,7 +33,7 @@ func InitServer() error {
 	uploader := &filehandlers.Uploader{
 		S3:     S3,
 		Bucket: "nimbus-cli-storage", // TODO: a function later will get the bucket name
-	} // Create an instance of Uploader
+	}
 
 	routes.InitFileRoutes(r, uploader)
 	routes.InitBoxRoutes(r)
