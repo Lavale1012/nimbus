@@ -9,23 +9,27 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/nimbus/cli/utils"
 	"github.com/spf13/cobra"
 )
 
-const defaultUploadEndpoint = "http://localhost:8080/v1/api/files"
-
 var filePathFlag string
 
-var fileUploadCmd = &cobra.Command{
-	Use:   "upload",
+var filePostCmd = &cobra.Command{
+	Use:   "post",
 	Short: "Upload a file to the API",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defaultUploadEndpoint, err := utils.GetEnv("DEFAULT_UPLOAD_PATH")
+		if err != nil {
+			return fmt.Errorf("error loading .env file: %v", err)
+		}
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
 		}
+
 		f, err := os.Open(filePathFlag)
 		if err != nil {
-			return err
+			return fmt.Errorf("error opening file: %v", err)
 		}
 		defer f.Close()
 		var body bytes.Buffer
@@ -61,7 +65,7 @@ var fileUploadCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(fileUploadCmd)
-	fileUploadCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
-	fileUploadCmd.MarkFlagRequired("file")
+	rootCmd.AddCommand(filePostCmd)
+	filePostCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
+	filePostCmd.MarkFlagRequired("file")
 }
