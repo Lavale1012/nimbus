@@ -39,6 +39,12 @@ func (d Downloader) DownloadFile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get object: %v", err)})
 		return
 	}
+	// Map not found to 404 if AWS returned NoSuchKey
+	// (string contains check keeps it simple without importing API error types)
+	if obj == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "object not found"})
+		return
+	}
 	defer obj.Body.Close()
 
 	ct := "application/octet-stream"
@@ -49,5 +55,6 @@ func (d Downloader) DownloadFile(c *gin.Context) {
 
 	filename := filepath.Base(key)
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("Content-Type", ct)
 	c.DataFromReader(http.StatusOK, *obj.ContentLength, ct, obj.Body, nil)
 }
