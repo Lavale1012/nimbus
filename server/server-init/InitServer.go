@@ -34,8 +34,11 @@ func InitServer() error {
 		S3:     S3,
 		Bucket: "nimbus-cli-storage", // TODO: a function later will get the bucket name
 	}
-
-	routes.InitFileRoutes(r, uploader)
+	downloader := &filehandlers.Downloader{
+		S3:     S3,
+		Bucket: "nimbus-cli-storage", // TODO: a function later will get the bucket name
+	}
+	routes.InitFileRoutes(r, uploader, downloader)
 	routes.InitBoxRoutes(r)
 	routes.InitSectionRoutes(r)
 
