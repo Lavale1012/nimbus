@@ -22,6 +22,7 @@ bin/
 nimbus
 api-server
 dist/
+nim
 
 # Environment files
 .env

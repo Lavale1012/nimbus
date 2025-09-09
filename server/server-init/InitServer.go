@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-contrib/cors"
@@ -36,6 +37,9 @@ func InitServer() error {
 	}
 
 	S3 = s3
+	if S3 == nil {
+		return fmt.Errorf("failed to connect to S3")
+	}
 
 	uploader := &filehandlers.Uploader{
 		S3:     S3,
@@ -47,7 +51,7 @@ func InitServer() error {
 	}
 	routes.InitFileRoutes(r, uploader, downloader)
 	routes.InitBoxRoutes(r)
-	routes.InitSectionRoutes(r)
+	routes.InitFolderRoutes(r)
 
 	r.Run("localhost:8080")
 	return nil

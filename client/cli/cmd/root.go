@@ -11,17 +11,20 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "cli",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Use:   "nimbus",
+	Short: "A cross-platform command-line interface for cloud file storage and management",
+	Long: `Nimbus CLI provides a hierarchical file organization system with direct S3 storage.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+Files are organized in a simple structure:
+- Boxes → Top-level containers (e.g., "work", "school", "photos")
+- Folders → Hierarchical directories within a box
+- Files → Individual files stored in S3
+
+Current MVP commands:
+  nimbus post --file ./document.pdf    Upload a file to S3
+  nimbus get --file <s3-key> -o ./doc  Download a file from S3
+
+Visit https://github.com/your-org/nim-cli for more information.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -38,9 +41,5 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cli.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.nimbus.yaml)")
 }

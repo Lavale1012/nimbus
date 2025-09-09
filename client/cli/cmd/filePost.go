@@ -11,10 +11,23 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/nimbus/cli/cli/animations"
-	"github.com/nimbus/cli/utils"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
+
+// ProgressReader wraps an io.Reader and updates a progress bar as data is read
+type ProgressReader struct {
+	Reader io.Reader
+	bar    *progressbar.ProgressBar
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	if n > 0 {
+		pr.bar.Add(n)
+	}
+	return n, err
+}
 
 var filePathFlag string
 
@@ -22,17 +35,15 @@ var filePostCmd = &cobra.Command{
 	Use:   "post",
 	Short: "Upload a file to the API",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		stop := make(chan struct{})
-		go animations.StartSpinner(stop)
-		defer func() {
-			close(stop)
-			fmt.Println()
-		}()
+		// stop := make(chan struct{})
+		// go animations.StartSpinner(stop)
+		// defer func() {
+		// 	close(stop)
+		// 	fmt.Println()
+		// }()
 
-		defaultUploadEndpoint, err := utils.GetEnv("DEFAULT_UPLOAD_PATH")
-		if err != nil {
-			return fmt.Errorf("error loading .env file: %v", err)
-		}
+		endpoint := "http://localhost:8080/v1/api/files"
+
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
 		}
@@ -42,12 +53,15 @@ var filePostCmd = &cobra.Command{
 			return fmt.Errorf("error opening file: %v", err)
 		}
 		defer f.Close()
+
 		var body bytes.Buffer
 		w := multipart.NewWriter(&body)
 		part, err := w.CreateFormFile("file", filepath.Base(filePathFlag))
 		if err != nil {
 			return err
 		}
+
+		// Copy file to multipart form (no progress bar here)
 		if _, err := io.Copy(part, f); err != nil {
 			return err
 		}
@@ -55,8 +69,19 @@ var filePostCmd = &cobra.Command{
 			return err
 		}
 
-		req, err := http.NewRequest(http.MethodPost, defaultUploadEndpoint, &body)
+		// Create progress bar for HTTP upload
+		bar := progressbar.DefaultBytes(
+			int64(body.Len()),
+			"uploading "+filepath.Base(filePathFlag),
+		)
 
+		// Create a progress reader that wraps the body
+		progressReader := &ProgressReader{
+			Reader: &body,
+			bar:    bar,
+		}
+
+		req, err := http.NewRequest(http.MethodPost, endpoint, progressReader)
 		if err != nil {
 			return err
 		}
@@ -69,17 +94,15 @@ var filePostCmd = &cobra.Command{
 
 		client := &http.Client{Timeout: 60 * time.Second}
 		resp, err := client.Do(req)
-
-		// stop spinner once the HTTP call returns
-
 		if err != nil {
 			return err
 		}
 		defer resp.Body.Close()
-		// respBytes, _ := io.ReadAll(resp.Body)
-		fmt.Printf("%s\n", resp.Status)
-		// fmt.Println(string(respBytes))
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			fmt.Printf("✅ Successfully uploaded %s\n", filepath.Base(filePathFlag))
+		} else {
+			fmt.Printf("❌ Upload failed: %s\n", resp.Status)
 			return fmt.Errorf("upload failed")
 		}
 		return nil
