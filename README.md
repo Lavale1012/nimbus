@@ -1,115 +1,115 @@
-# Nimbus CLI
+# ☁️ Nimbus CLI
 
-A cross-platform command-line interface for cloud file storage and management.
+> 🚀 A powerful cross-platform command-line interface for cloud file storage and management
 
-## Overview
+## 📋 Overview
 
 Nimbus CLI provides a hierarchical file organization system with direct S3 storage and a powerful command-line interface. Files are organized as:
 
-- **Boxes** → Top-level containers (e.g., "work", "school", "photos") 
-- **Folders** → Hierarchical directories within a box
-- **Files** → Versioned objects with direct S3 storage
+- 📦 **Boxes** → Top-level containers (e.g., "work", "school", "photos")
+- 📁 **Folders** → Hierarchical directories within a box
+- 📄 **Files** → Versioned objects with direct S3 storage
 
-## Architecture
+## 🏗️ Architecture
 
-- **CLI**: Go + Cobra for command-line interface
-- **API**: Go + Gin for REST API server
-- **Database**: PostgreSQL for metadata storage
-- **Storage**: AWS S3 with pre-signed URLs (direct client uploads/downloads)
-- **Auth**: OIDC (Auth0/Cognito/Clerk) with RBAC
+- 💻 **CLI**: Go + Cobra for command-line interface
+- 🌐 **API**: Go + Gin for REST API server
+- 🗄️ **Database**: PostgreSQL for metadata storage
+- 🪣 **Storage**: AWS S3 with pre-signed URLs (direct client uploads/downloads)
+- 🔐 **Auth**: OIDC (Auth0/Cognito/Clerk) with RBAC
 
-## Quick Start
+## 🚀 Quick Start
 
-### Prerequisites
+### 📋 Prerequisites
 
-- Go 1.21+
-- Docker & Docker Compose
-- Git
+- 🔧 Go 1.21+
+- 🐳 Docker & Docker Compose
+- 📝 Git
 
-### Local Development Setup
+### 🛠️ Local Development Setup
 
-1. **Clone the repository**
+1. **📥 Clone the repository**
    ```bash
    git clone <repository-url>
    cd nim-cli
    ```
 
-2. **Start local services**
+2. **🚀 Start local services**
    ```bash
    docker compose up -d
    ```
    This starts PostgreSQL and LocalStack (S3 emulator).
 
-3. **Environment is already configured**
+3. **⚙️ Environment is already configured**
    The repository includes a `.env` file with local development settings.
 
-4. **Build and install CLI**
+4. **🔨 Build and install CLI**
    ```bash
    cd client && go build -o nim cli/main.go
    ./nim --help
    ```
 
-5. **Start API server**
+5. **▶️ Start API server**
    ```bash
    cd server && go run main.go
    ```
 
-## Usage
+## 📖 Usage
 
-### Current Commands (MVP Implementation)
+### ✅ Current Commands (MVP Implementation)
 
 ```bash
-# Upload a file
+# 📤 Upload a file
 nim post --file ./notes.pdf
 
-# Download a file
+# 📥 Download a file
 nim get --file <s3-key> --output ./downloaded-notes.pdf
 
-# Delete a file
+# 🗑️ Delete a file
 nim del --file <filename>
 ```
 
-### Planned Commands (Future Implementation)
+### 🔮 Planned Commands (Future Implementation)
 
 ```bash
-# Check current user
+# 👤 Check current user
 nim whoami
 
-# Create a box
+# 📦 Create a box
 nim box create "school"
 
-# List boxes
+# 📋 List boxes
 nim box ls
 
-# List contents of a box
+# 📁 List contents of a box
 nim ls school:/
 
-# Create a folder
+# 🆕 Create a folder
 nim mkdir school:/assignments
 
-# Upload a file
+# 📤 Upload a file
 nim upload ./notes.pdf school:/assignments
 
-# Download a file
+# 📥 Download a file
 nim download school:/assignments/notes.pdf -o ./downloaded-notes.pdf
 
-# Remove a file
+# 🗑️ Remove a file
 nim rm school:/assignments/notes.pdf
 ```
 
-### Path Format
+### 🗂️ Path Format
 
 Nimbus uses a hierarchical path format:
 ```
-BoxName:/folder/subfolder/file.ext
+📦 BoxName:/📁folder/📁subfolder/📄file.ext
 ```
 
 - The `:` separates the box from the folder path
 - Folder paths use standard `/` separators
 
-## Development
+## 🛠️ Development
 
-### Project Structure
+### 📁 Project Structure
 
 ```
 nim-cli/
@@ -135,43 +135,43 @@ nim-cli/
 └── .env                     # Environment configuration
 ```
 
-### Building
+### 🔨 Building
 
 ```bash
-# Build CLI
+# 💻 Build CLI
 cd client && go build -o nim cli/main.go
 
-# Build API server
+# 🌐 Build API server
 cd server && go build -o api-server main.go
 ```
 
-### Testing
+### 🧪 Testing
 
 ```bash
-# Run all tests
+# 🚀 Run all tests
 go test ./...
 
-# Run tests with coverage  
+# 📊 Run tests with coverage
 go test -cover ./...
 
-# Run tests for specific modules
+# 🎯 Run tests for specific modules
 cd client && go test ./...
 cd server && go test ./...
 ```
 
-### Code Quality
+### ✨ Code Quality
 
 ```bash
-# Format code
+# 🎨 Format code
 go fmt ./...
 
-# Run linter (if golangci-lint is installed)
+# 🔍 Run linter (if golangci-lint is installed)
 golangci-lint run
 ```
 
-## Configuration
+## ⚙️ Configuration
 
-### Environment Variables
+### 🌍 Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -183,7 +183,7 @@ golangci-lint run
 | `S3_ENDPOINT` | S3 endpoint (for LocalStack) | AWS default |
 | `S3_FORCE_PATH_STYLE` | Force path-style S3 URLs | `false` |
 
-### Local Development
+### 🧪 Local Development
 
 The repository includes a `.env` file with these local development settings:
 
@@ -199,20 +199,20 @@ DEFAULT_UPLOAD_PATH=http://localhost:8080/v1/api/files
 DEFAULT_DOWNLOAD_URL=http://localhost:8080/v1/api/files
 ```
 
-## API Reference
+## 🌐 API Reference
 
-### Base URL
+### 🔗 Base URL
 ```
 http://localhost:8080
 ```
 
-### Current Endpoints (MVP Implementation)
+### ✅ Current Endpoints (MVP Implementation)
 
-- `POST /v1/api/files` - Upload file
-- `GET /v1/api/files?key=<s3-key>` - Download file
-- `DELETE /v1/api/files/{filename}` - Delete file
+- `📤 POST /v1/api/files` - Upload file
+- `📥 GET /v1/api/files?key=<s3-key>` - Download file
+- `🗑️ DELETE /v1/api/files/{filename}` - Delete file
 
-### Planned Endpoints (Future Implementation)
+### 🔮 Planned Endpoints (Future Implementation)
 
 - `GET /healthz` - Health check
 - `GET /users/me` - Current user info  
@@ -223,50 +223,58 @@ http://localhost:8080
 - `GET /files/:id/presign-download` - Get download URL
 - `GET /resolve?path=...` - Resolve path to IDs
 
-## Roadmap
+## 🗺️ Roadmap
 
 See [roadmap.md](roadmap.md) for detailed development phases:
 
-- **Phase 1 (MVP)**: Local development with core file operations
-- **Phase 2**: Authentication and authorization
-- **Phase 3**: Sharing and collaboration
-- **Phase 4**: Advanced features (search, versioning, bulk ops)
-- **Phase 5**: Enterprise features (compliance, admin tools)
+- **🎯 Phase 1 (MVP)**: Local development with core file operations
+- **🔐 Phase 2**: Authentication and authorization
+- **🤝 Phase 3**: Sharing and collaboration
+- **⚡ Phase 4**: Advanced features (search, versioning, bulk ops)
+- **🏢 Phase 5**: Enterprise features (compliance, admin tools)
 
-## Contributing
+## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. 🍴 Fork the repository
+2. 🌿 Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. 💾 Commit your changes (`git commit -m 'Add amazing feature'`)
+4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
+5. 🔄 Open a Pull Request
 
-### Development Guidelines
+### 📝 Development Guidelines
 
-- Follow Go best practices and idioms
-- Write tests for new functionality
-- Update documentation for API changes
-- Use conventional commit messages
-- Ensure all tests pass before submitting PR
+- ✅ Follow Go best practices and idioms
+- 🧪 Write tests for new functionality
+- 📚 Update documentation for API changes
+- 📋 Use conventional commit messages
+- 🔍 Ensure all tests pass before submitting PR
 
-## Security
+## 🔒 Security
 
-- All file uploads/downloads use pre-signed S3 URLs (no data flows through API)
-- JWT-based authentication with OIDC providers
-- RBAC for resource access control
-- Audit logging for all operations
-- Encryption in transit and at rest
+- 🔗 All file uploads/downloads use pre-signed S3 URLs (no data flows through API)
+- 🎫 JWT-based authentication with OIDC providers
+- 🛡️ RBAC for resource access control
+- 📝 Audit logging for all operations
+- 🔐 Encryption in transit and at rest
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## 💬 Support
 
-- **Documentation**: See the [docs/](docs/) directory
-- **Issues**: Report bugs and feature requests via GitHub Issues
-- **Discussions**: Use GitHub Discussions for questions and ideas
+- 📖 **Documentation**: See the [docs/](docs/) directory
+- 🐛 **Issues**: Report bugs and feature requests via GitHub Issues
+- 💭 **Discussions**: Use GitHub Discussions for questions and ideas
 
-## Status
+## 📊 Status
 
 🚧 **Currently in development** - MVP phase targeting core file operations with local development environment.
+
+---
+
+<div align="center">
+
+**Made with ❤️ for developers who love the command line**
+
+</div>
