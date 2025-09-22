@@ -5,13 +5,13 @@ import (
 	filehandlers "github.com/nimbus/api/handlers/fileHandlers"
 )
 
-func InitFileRoutes(r *gin.Engine, uploader *filehandlers.Uploader, downloader *filehandlers.Downloader) {
+func InitFileRoutes(r *gin.Engine, config filehandlers.AWS3Config) {
 	// Initialize routes here
 
 	route := r.Group("v1/api")
 	{
-		route.GET("/files", downloader.DownloadFile)
-		route.POST("/files", uploader.UploadFile)
-		route.DELETE("/files/:id")
+		route.GET("/files", config.DownloadFile)
+		route.POST("/files", config.UploadFile)
+		route.DELETE("/files/:name", config.DeleteFile)
 	}
 }

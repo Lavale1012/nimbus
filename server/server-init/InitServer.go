@@ -41,15 +41,11 @@ func InitServer() error {
 		return fmt.Errorf("failed to connect to S3")
 	}
 
-	uploader := &filehandlers.Uploader{
+	config := filehandlers.AWS3Config{
 		S3:     S3,
 		Bucket: bucket,
 	}
-	downloader := &filehandlers.Downloader{
-		S3:     S3,
-		Bucket: bucket,
-	}
-	routes.InitFileRoutes(r, uploader, downloader)
+	routes.InitFileRoutes(r, config)
 	routes.InitBoxRoutes(r)
 	routes.InitFolderRoutes(r)
 
