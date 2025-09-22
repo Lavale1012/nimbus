@@ -45,8 +45,8 @@ Nimbus CLI provides a hierarchical file organization system with direct S3 stora
 
 4. **Build and install CLI**
    ```bash
-   cd client && go build -o nimbus cli/main.go
-   ./nimbus --help
+   cd client && go build -o nim cli/main.go
+   ./nim --help
    ```
 
 5. **Start API server**
@@ -60,38 +60,41 @@ Nimbus CLI provides a hierarchical file organization system with direct S3 stora
 
 ```bash
 # Upload a file
-nimbus post --file ./notes.pdf
+nim post --file ./notes.pdf
 
 # Download a file
-nimbus get --file <s3-key> --output ./downloaded-notes.pdf
+nim get --file <s3-key> --output ./downloaded-notes.pdf
+
+# Delete a file
+nim del --file <filename>
 ```
 
 ### Planned Commands (Future Implementation)
 
 ```bash
 # Check current user
-nimbus whoami
+nim whoami
 
 # Create a box
-nimbus box create "school"
+nim box create "school"
 
 # List boxes
-nimbus box ls
+nim box ls
 
 # List contents of a box
-nimbus ls school:/
+nim ls school:/
 
 # Create a folder
-nimbus mkdir school:/assignments
+nim mkdir school:/assignments
 
 # Upload a file
-nimbus upload ./notes.pdf school:/assignments
+nim upload ./notes.pdf school:/assignments
 
 # Download a file
-nimbus download school:/assignments/notes.pdf -o ./downloaded-notes.pdf
+nim download school:/assignments/notes.pdf -o ./downloaded-notes.pdf
 
 # Remove a file
-nimbus rm school:/assignments/notes.pdf
+nim rm school:/assignments/notes.pdf
 ```
 
 ### Path Format
@@ -136,7 +139,7 @@ nim-cli/
 
 ```bash
 # Build CLI
-cd client && go build -o nimbus cli/main.go
+cd client && go build -o nim cli/main.go
 
 # Build API server
 cd server && go build -o api-server main.go
@@ -207,6 +210,7 @@ http://localhost:8080
 
 - `POST /v1/api/files` - Upload file
 - `GET /v1/api/files?key=<s3-key>` - Download file
+- `DELETE /v1/api/files/{filename}` - Delete file
 
 ### Planned Endpoints (Future Implementation)
 
