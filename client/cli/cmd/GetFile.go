@@ -109,16 +109,6 @@ var GetFileCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(GetFileCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// GetFileCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// GetFileCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	GetFileCmd.Flags().StringVarP(&keyFlag, "file", "f", "", "S3 key to download (required)")
 	GetFileCmd.Flags().StringVarP(&outputFileFlag, "output", "o", "", "Output filename (optional)")
 	GetFileCmd.MarkFlagRequired("file")
