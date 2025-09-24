@@ -10,15 +10,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
+	config "github.com/nimbus/api/db/S3/config"
 	s3Operations "github.com/nimbus/api/db/S3/operations"
 )
 
-type AWS3Config struct {
-	S3     *s3.Client
-	Bucket string
-}
-
-func (d AWS3Config) DownloadFile(c *gin.Context) {
+func DownloadFile(d config.AWS3ConfigFile, c *gin.Context) {
 	if d.S3 == nil || d.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "downloader not configured: missing S3 client or bucket"})
 		return
@@ -61,7 +57,7 @@ func (d AWS3Config) DownloadFile(c *gin.Context) {
 	c.DataFromReader(http.StatusOK, *obj.ContentLength, ct, obj.Body, nil)
 }
 
-func (h AWS3Config) UploadFile(c *gin.Context) {
+func UploadFile(h config.AWS3ConfigFile, c *gin.Context) {
 	// Guard against nil client or empty bucket to avoid panics
 	if h.S3 == nil || h.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploader not configured: missing S3 client or bucket"})
@@ -108,7 +104,7 @@ func (h AWS3Config) UploadFile(c *gin.Context) {
 	})
 }
 
-func (d AWS3Config) DeleteFile(c *gin.Context) {
+func DeleteFile(d config.AWS3ConfigFile, c *gin.Context) {
 	// Implementation for deleting a file from S3
 	keyName := c.Param("name")
 	if keyName == "" {

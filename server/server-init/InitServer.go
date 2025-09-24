@@ -8,7 +8,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	aws "github.com/nimbus/api/db/S3/config"
-	filehandlers "github.com/nimbus/api/handlers/fileHandlers"
+	config "github.com/nimbus/api/db/S3/config"
 	"github.com/nimbus/api/routes"
 	"github.com/nimbus/api/utils"
 )
@@ -41,7 +41,7 @@ func InitServer() error {
 		return fmt.Errorf("failed to connect to S3")
 	}
 
-	config := filehandlers.AWS3Config{
+	config := config.AWS3ConfigFile{
 		S3:     S3,
 		Bucket: bucket,
 	}
