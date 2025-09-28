@@ -131,3 +131,7 @@ func DeleteFile(d config.AWS3ConfigFile, c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "file deleted"})
 
 }
+
+func ListFiles(h config.AWS3ConfigFile, c *gin.Context)  {}
+func MoveFile(h config.AWS3ConfigFile, c *gin.Context)   {}
+func RenameFile(h config.AWS3ConfigFile, c *gin.Context) {}

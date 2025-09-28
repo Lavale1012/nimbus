@@ -14,6 +14,8 @@ import (
 
 func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 	// Implementation for creating a folder
+	const slash string = "/"
+	const MAX_FOLDER_NAME_LENGTH int = 255
 	if h.Bucket == "" || h.S3 == nil {
 		c.JSON(500, gin.H{"error": "S3 client or bucket not configured"})
 		return
@@ -25,13 +27,16 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 		return
 	}
 
+	if len(foldername) > MAX_FOLDER_NAME_LENGTH {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("folder name must be at most %d characters", MAX_FOLDER_NAME_LENGTH)})
+		return
+	}
+
 	// Sanitize the foldername and build a proper key
 	base := filepath.Base(foldername)
 	base = strings.ReplaceAll(base, " ", "_")
-	if base == "" {
-		base = "default_folder"
-	}
-	key := fmt.Sprintf(base + "/")
+
+	key := fmt.Sprintf("%s%s", base, slash)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
@@ -51,3 +56,7 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 
 func DownloadFolder(h config.AWS3ConfigFile, c *gin.Context) {}
 func UploadFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
+func DeleteFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
+func ListFolders(h config.AWS3ConfigFile, c *gin.Context)    {}
+func MoveFolder(h config.AWS3ConfigFile, c *gin.Context)     {}
+func RenameFolder(h config.AWS3ConfigFile, c *gin.Context)   {}

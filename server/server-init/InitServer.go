@@ -47,7 +47,7 @@ func InitServer() error {
 	}
 	routes.InitFileRoutes(r, config)
 	routes.InitBoxRoutes(r)
-	routes.InitFolderRoutes(r)
+	routes.InitFolderRoutes(r, config)
 
 	r.Run("localhost:8080")
 	return nil
