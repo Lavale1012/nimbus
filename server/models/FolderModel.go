@@ -1,23 +1,16 @@
 package models
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 type FolderModel struct {
 	gorm.Model
-	ID         uint          `gorm:"primaryKey" json:"id"`
-	Name       string        `gorm:"not null" json:"name"`
-	UserID     string        `json:"user_id"`
-	Box        string        `json:"box"`
-	ParentID   *uint         `json:"parent_id"` // Pointer to allow null values for root folders
-	User       UserModel     `gorm:"foreignKey:UserID;references:ID" json:"user"`
-	BoxRef     BoxModel      `gorm:"foreignKey:Box;references:Name" json:"box_ref"`
-	Parent     *FolderModel  `gorm:"foreignKey:ParentID;references:ID" json:"parent"`
-	Children   []FolderModel `gorm:"foreignKey:ParentID;references:ID" json:"children"`
-	Files      []FileModel   `gorm:"foreignKey:Folder;references:Name" json:"files"`
-	CreatedAt  time.Time     `json:"created_at"`
-	UpdatedAt  time.Time     `json:"updated_at"`
+	Name     string        `gorm:"not null" json:"name"`
+	UserID   uint          `gorm:"not null;index" json:"user_id"`
+	BoxID    uint          `gorm:"not null;index" json:"box_id"`
+	ParentID *uint         `gorm:"index" json:"parent_id"` // Pointer to allow null values for root folders
+	User     UserModel     `gorm:"constraint:OnDelete:CASCADE" json:"user,omitempty"`
+	Box      BoxModel      `gorm:"constraint:OnDelete:CASCADE" json:"box,omitempty"`
+	Parent   *FolderModel  `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`
+	Children []FolderModel `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"children,omitempty"`
+	Files    []FileModel   `gorm:"foreignKey:FolderID;constraint:OnDelete:CASCADE" json:"files,omitempty"`
 }

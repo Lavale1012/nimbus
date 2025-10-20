@@ -4,8 +4,8 @@ import "gorm.io/gorm"
 
 type UserModel struct {
 	gorm.Model
-	ID       string     `json:"id"`
-	Email    string     `json:"email"`
-	Password string     `json:"password"`
-	Boxes    []BoxModel `gorm:"foreignKey:UserID;references:ID" json:"boxes"`
+	Email    string     `gorm:"unique;not null" json:"email"`
+	Password string     `gorm:"not null" json:"password"`
+	PassKey  string     `gorm:"not null" json:"passkey"`
+	Boxes    []BoxModel `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"boxes,omitempty"`
 }

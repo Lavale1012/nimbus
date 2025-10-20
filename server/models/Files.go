@@ -4,13 +4,13 @@ import "gorm.io/gorm"
 
 type FileModel struct {
 	gorm.Model
-	ID        string      `json:"id"`
-	UserID    string      `json:"user_id"`
-	Name      string      `json:"name"`
-	Size      int64       `json:"size"`
-	Box       string      `json:"box"`
-	Folder    string      `json:"folder"`
-	User      UserModel   `gorm:"foreignKey:UserID;references:ID" json:"user"`
-	BoxRef    BoxModel    `gorm:"foreignKey:Box;references:Name" json:"box_ref"`
-	FolderRef FolderModel `gorm:"foreignKey:Folder;references:Name" json:"folder_ref"`
+	Name     string      `gorm:"not null" json:"name"`
+	Size     int64       `gorm:"default:0" json:"size"`
+	S3Key    string      `gorm:"unique" json:"s3_key"` // S3 object key for retrieval
+	UserID   uint        `gorm:"not null;index" json:"user_id"`
+	BoxID    uint        `gorm:"not null;index" json:"box_id"`
+	FolderID *uint       `gorm:"index" json:"folder_id"` // Pointer to allow null (files directly in box)
+	User     UserModel   `gorm:"constraint:OnDelete:CASCADE" json:"user,omitempty"`
+	Box      BoxModel    `gorm:"constraint:OnDelete:CASCADE" json:"box,omitempty"`
+	Folder   *FolderModel `gorm:"constraint:OnDelete:CASCADE" json:"folder,omitempty"`
 }
