@@ -56,7 +56,7 @@ func InitServer() error {
 	if DB == nil {
 		return fmt.Errorf("failed to connect to PostgreSQL")
 	}
-	routes.InitFileRoutes(r, config)
+	routes.InitFileRoutes(r, config, DB)
 	routes.InitBoxRoutes(r)
 	routes.InitFolderRoutes(r, config)
 
