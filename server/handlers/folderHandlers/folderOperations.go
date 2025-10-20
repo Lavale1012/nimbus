@@ -12,6 +12,10 @@ import (
 	config "github.com/nimbus/api/db/S3/config"
 )
 
+// TODO: Implement folder operations with Postgres integration, these varibales will hold current folder state and ID, functions for theses need to be implemented
+var CurrentFolder string
+var FolderID uint
+
 func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 	// Implementation for creating a folder
 	const slash string = "/"
@@ -62,3 +66,7 @@ func DeleteFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
 func ListFolders(h config.AWS3ConfigFile, c *gin.Context)    {}
 func MoveFolder(h config.AWS3ConfigFile, c *gin.Context)     {}
 func RenameFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
+func CurrentFolderPath(h config.AWS3ConfigFile, c *gin.Context) (string, uint, error) {
+	// Implementation for getting the current folder path
+	return CurrentFolder, FolderID, nil
+}

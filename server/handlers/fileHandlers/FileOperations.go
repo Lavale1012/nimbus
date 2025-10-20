@@ -12,9 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	config "github.com/nimbus/api/db/S3/config"
 	s3Operations "github.com/nimbus/api/db/S3/operations"
+	"github.com/nimbus/api/models"
+	"gorm.io/gorm"
 )
 
-func DownloadFile(d config.AWS3ConfigFile, c *gin.Context) {
+func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	if d.S3 == nil || d.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "downloader not configured: missing S3 client or bucket"})
 		return
@@ -27,6 +29,20 @@ func DownloadFile(d config.AWS3ConfigFile, c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
+
+	//Check if file exists in Postgres before downloading from S3
+	var fileModel models.FileModel
+	result := db.Model(&models.FileModel{}).Where("s3_key = ?", key).First(&fileModel)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found in database"})
+		return
+	}
+
+	//TODO: Additional permission checks can be added here (e.g., verify user owns the file)
+
+	//TODO: Check size of file before downloading to prevent large downloads if needed
+
+	//TODO: Implement logging of download activity if required
 
 	// Proceed with downloading the file from S3
 	obj, err := d.S3.GetObject(ctx, &s3.GetObjectInput{
@@ -57,7 +73,7 @@ func DownloadFile(d config.AWS3ConfigFile, c *gin.Context) {
 	c.DataFromReader(http.StatusOK, *obj.ContentLength, ct, obj.Body, nil)
 }
 
-func UploadFile(h config.AWS3ConfigFile, c *gin.Context) {
+func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	// Guard against nil client or empty bucket to avoid panics
 	if h.S3 == nil || h.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploader not configured: missing S3 client or bucket"})
@@ -71,6 +87,34 @@ func UploadFile(h config.AWS3ConfigFile, c *gin.Context) {
 		return
 	}
 	defer file.Close()
+
+	//TODO: Additional permission checks can be added here (e.g., verify user owns the file)
+
+	//TODO: Add file details to Postgres after successful upload
+
+	//TODO: Save file metadata to Postgres before uploading to S3
+
+	//TODO: Create functions to generate UserID, BoxID, FolderID based on authenticated user and context
+
+	result := db.Model(&models.FileModel{}).Create(&models.FileModel{
+		// UserID, BoxID, FolderID should be set based on authenticated user and context
+		// UserID:  userID,
+		// BoxID:   boxID,
+		// FolderID: folderID,
+		// Box:   BoxName,
+		Name:  header.Filename,
+		Size:  header.Size,
+		S3Key: header.Filename,
+		// UserID, BoxID, FolderID should be set based on authenticated user and context
+	})
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file metadata to database"})
+		return
+	}
+
+	//TODO: Check size of file before uploading to prevent large uploads if needed
+
+	//TODO: Implement logging of upload activity if required
 
 	// Sanitize the filename and build a namespaced, collision-proof key
 	base := filepath.Base(header.Filename)
@@ -104,7 +148,7 @@ func UploadFile(h config.AWS3ConfigFile, c *gin.Context) {
 	})
 }
 
-func DeleteFile(d config.AWS3ConfigFile, c *gin.Context) {
+func DeleteFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	// Implementation for deleting a file from S3
 	keyName := c.Param("name")
 	if keyName == "" {
@@ -118,7 +162,13 @@ func DeleteFile(d config.AWS3ConfigFile, c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-
+	//Check if file exists in Postgres before deleting from S3
+	var fileModel models.FileModel
+	result := db.Model(&models.FileModel{}).Where("s3_key = ?", keyName).First(&fileModel)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found in database"})
+		return
+	}
 	_, err := d.S3.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &d.Bucket,
 		Key:    &keyName,
@@ -127,11 +177,16 @@ func DeleteFile(d config.AWS3ConfigFile, c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete object: %v", err)})
 		return
 	}
-
+	// Delete file record from Postgres
+	result = db.Delete(&fileModel)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file record from database"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "file deleted"})
 
 }
 
-func ListFiles(h config.AWS3ConfigFile, c *gin.Context)  {}
-func MoveFile(h config.AWS3ConfigFile, c *gin.Context)   {}
-func RenameFile(h config.AWS3ConfigFile, c *gin.Context) {}
+func ListFiles(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context)  {}
+func MoveFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context)   {}
+func RenameFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {}
