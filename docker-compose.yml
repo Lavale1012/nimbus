@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nimbus-postgres
+    environment:
+      POSTGRES_USER: nimbus
+      POSTGRES_PASSWORD: nimbus
+      POSTGRES_DB: nimbus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nimbus"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: nimbus-localstack
+    environment:
+      SERVICES: s3
+      EDGE_PORT: 4566
+      DEBUG: 1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  postgres_data:
+  localstack_data:

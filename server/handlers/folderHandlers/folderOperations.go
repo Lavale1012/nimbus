@@ -15,7 +15,7 @@ import (
 func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 	// Implementation for creating a folder
 	const slash string = "/"
-	const MAX_FOLDER_NAME_LENGTH int = 255
+	const MAX_FOLDER_NAME_LENGTH int8 = 25
 	if h.Bucket == "" || h.S3 == nil {
 		c.JSON(500, gin.H{"error": "S3 client or bucket not configured"})
 		return
@@ -27,7 +27,9 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 		return
 	}
 
-	if len(foldername) > MAX_FOLDER_NAME_LENGTH {
+	// TODO: check if folder already exists
+
+	if int8(len(foldername)) > MAX_FOLDER_NAME_LENGTH {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("folder name must be at most %d characters", MAX_FOLDER_NAME_LENGTH)})
 		return
 	}
