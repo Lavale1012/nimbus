@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	config "github.com/nimbus/api/db/S3/config"
 	s3Operations "github.com/nimbus/api/db/S3/operations"
+	boxhandlers "github.com/nimbus/api/handlers/boxHandlers"
+	folderhandlers "github.com/nimbus/api/handlers/folderHandlers"
 	"github.com/nimbus/api/models"
 	"gorm.io/gorm"
 )
@@ -75,6 +78,7 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 
 func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	// Guard against nil client or empty bucket to avoid panics
+	var userID uint
 	if h.S3 == nil || h.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploader not configured: missing S3 client or bucket"})
 		return
@@ -82,6 +86,21 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 
 	// Handle file upload logic here
 	file, header, err := c.Request.FormFile("file")
+
+	if err != nil {
+		c.JSON(400, gin.H{"error": "File input error: " + err.Error()})
+		return
+	} else if header == nil {
+		c.JSON(400, gin.H{"error": "File header is nil"})
+		return
+	}
+
+	strUserId := c.Query("user_id")
+	intUserID, err := strconv.Atoi(strUserId)
+	if err == nil {
+		userID = uint(intUserID)
+	}
+
 	if err != nil {
 		c.JSON(400, gin.H{"error": "File is required"})
 		return
@@ -90,26 +109,53 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 
 	//TODO: Additional permission checks can be added here (e.g., verify user owns the file)
 
-	//TODO: Add file details to Postgres after successful upload
+	//TODO: Get UserID from authenticated session
+	//TODO: Get BoxID from request parameters or user's default box
+	//TODO: Get FolderIDs from request parameters (can be multiple folders)
 
-	//TODO: Save file metadata to Postgres before uploading to S3
+	boxID := boxhandlers.BoxID
 
-	//TODO: Create functions to generate UserID, BoxID, FolderID based on authenticated user and context
-
-	result := db.Model(&models.FileModel{}).Create(&models.FileModel{
-		// UserID, BoxID, FolderID should be set based on authenticated user and context
-		// UserID:  userID,
-		// BoxID:   boxID,
-		// FolderID: folderID,
-		// Box:   BoxName,
-		Name:  header.Filename,
-		Size:  header.Size,
-		S3Key: header.Filename,
-		// UserID, BoxID, FolderID should be set based on authenticated user and context
-	})
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file metadata to database"})
+	// Validate that the user exists
+	var user models.UserModel
+	if err := db.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("User with ID %d not found. Please ensure the user exists in the database.", userID),
+		})
 		return
+	}
+
+	// Validate that the box exists and belongs to the user
+	var box models.BoxModel
+	if err := db.Where("id = ? AND user_id = ?", boxID, userID).First(&box).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Box with ID %d not found or does not belong to user %d. Please create a box first.", boxID, userID),
+		})
+		return
+	}
+
+	// Create the file record
+	fileModel := &models.FileModel{
+		UserID: uint(intUserID),
+		BoxID:  boxID,
+		Name:   header.Filename,
+		Size:   header.Size,
+		S3Key:  header.Filename,
+	}
+
+	result := db.Create(fileModel)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save file metadata: %v", result.Error)})
+		return
+	}
+
+	// Associate file with folder(s) if FolderID is provided
+	// In a real implementation, you'd get folder IDs from the request (e.g., query params or JSON body)
+	if folderhandlers.FolderID != 0 {
+		var folder models.FolderModel
+		if err := db.First(&folder, folderhandlers.FolderID).Error; err == nil {
+			// Associate the file with the folder using GORM's many2many
+			db.Model(fileModel).Association("Folders").Append(&folder)
+		}
 	}
 
 	//TODO: Check size of file before uploading to prevent large uploads if needed

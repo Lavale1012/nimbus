@@ -1,7 +1,7 @@
 package boxhandlers
 
-var BoxName string
-var BoxID uint
+var BoxName string = "MyBox"
+var BoxID uint = 23432134
 
 func CreateBox()   {}
 func DeleteBox()   {}

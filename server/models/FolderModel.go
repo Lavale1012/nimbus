@@ -12,5 +12,5 @@ type FolderModel struct {
 	Box      BoxModel      `gorm:"constraint:OnDelete:CASCADE" json:"box,omitempty"`
 	Parent   *FolderModel  `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`
 	Children []FolderModel `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"children,omitempty"`
-	Files    []FileModel   `gorm:"foreignKey:FolderID;constraint:OnDelete:CASCADE" json:"files,omitempty"`
+	Files    []FileModel   `gorm:"many2many:file_folders;constraint:OnDelete:CASCADE" json:"files,omitempty"`
 }
