@@ -13,8 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	config "github.com/nimbus/api/db/S3/config"
 	s3Operations "github.com/nimbus/api/db/S3/operations"
-	boxhandlers "github.com/nimbus/api/handlers/boxHandlers"
-	folderhandlers "github.com/nimbus/api/handlers/folderHandlers"
 	"github.com/nimbus/api/models"
 	"gorm.io/gorm"
 )
@@ -77,120 +75,154 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 }
 
 func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
-	// Guard against nil client or empty bucket to avoid panics
-	var userID uint
+	// Step 1: Validate S3 configuration
 	if h.S3 == nil || h.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploader not configured: missing S3 client or bucket"})
 		return
 	}
 
-	// Handle file upload logic here
+	// Step 2: Get user_id and box_id from URL query parameters
+	strUserID := c.Query("user_id")
+	fmt.Printf("🔍 DEBUG: Received user_id from Query: '%s'\n", strUserID)
+
+	if strUserID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required in query parameters"})
+		return
+	}
+
+	intUserID, err := strconv.Atoi(strUserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user_id"})
+		return
+	}
+	userID := uint(intUserID)
+	fmt.Printf("✅ DEBUG: Parsed user_id: %d\n", userID)
+
+	strBoxID := c.Query("box_id")
+	fmt.Printf("🔍 DEBUG: Received box_id from Query: '%s'\n", strBoxID)
+
+	if strBoxID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "box_id is required in query parameters"})
+		return
+	}
+
+	intBoxID, err := strconv.Atoi(strBoxID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid box_id"})
+		return
+	}
+
+	boxID := uint(intBoxID)
+	fmt.Printf("✅ DEBUG: Parsed box_id: %d\n", boxID)
+
+	// Step 3: Get the file from multipart form data
 	file, header, err := c.Request.FormFile("file")
-
 	if err != nil {
-		c.JSON(400, gin.H{"error": "File input error: " + err.Error()})
-		return
-	} else if header == nil {
-		c.JSON(400, gin.H{"error": "File header is nil"})
-		return
-	}
-
-	strUserId := c.Query("user_id")
-	intUserID, err := strconv.Atoi(strUserId)
-	if err == nil {
-		userID = uint(intUserID)
-	}
-
-	if err != nil {
-		c.JSON(400, gin.H{"error": "File is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File input error: " + err.Error()})
 		return
 	}
 	defer file.Close()
 
-	//TODO: Additional permission checks can be added here (e.g., verify user owns the file)
+	if header == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File header is nil"})
+		return
+	}
 
-	//TODO: Get UserID from authenticated session
-	//TODO: Get BoxID from request parameters or user's default box
-	//TODO: Get FolderIDs from request parameters (can be multiple folders)
+	size := header.Size
+	if size <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File size must be greater than zero"})
+		return
+	}
 
-	boxID := boxhandlers.BoxID
-
-	// Validate that the user exists
+	// Step 4: Validate that the user exists
 	var user models.UserModel
 	if err := db.First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("User with ID %d not found. Please ensure the user exists in the database.", userID),
+			"error": fmt.Sprintf("User with ID %d not found", userID),
 		})
 		return
 	}
 
-	// Validate that the box exists and belongs to the user
+	// Step 5: Validate that the box exists and belongs to the user
 	var box models.BoxModel
-	if err := db.Where("id = ? AND user_id = ?", boxID, userID).First(&box).Error; err != nil {
+	if err := db.Where("box_id = ? AND user_id = ?", boxID, userID).First(&box).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("Box with ID %d not found or does not belong to user %d. Please create a box first.", boxID, userID),
+			"error": fmt.Sprintf("Box with ID %d not found or does not belong to user %d", boxID, userID),
 		})
 		return
 	}
 
-	// Create the file record
-	fileModel := &models.FileModel{
-		UserID: uint(intUserID),
-		BoxID:  boxID,
-		Name:   header.Filename,
-		Size:   header.Size,
-		S3Key:  header.Filename,
-	}
+	// Use the box's actual database ID (not the custom BoxID) for foreign key reference
+	actualBoxID := box.ID
 
-	result := db.Create(fileModel)
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save file metadata: %v", result.Error)})
-		return
-	}
-
-	// Associate file with folder(s) if FolderID is provided
-	// In a real implementation, you'd get folder IDs from the request (e.g., query params or JSON body)
-	if folderhandlers.FolderID != 0 {
-		var folder models.FolderModel
-		if err := db.First(&folder, folderhandlers.FolderID).Error; err == nil {
-			// Associate the file with the folder using GORM's many2many
-			db.Model(fileModel).Association("Folders").Append(&folder)
-		}
-	}
-
-	//TODO: Check size of file before uploading to prevent large uploads if needed
-
-	//TODO: Implement logging of upload activity if required
-
-	// Sanitize the filename and build a namespaced, collision-proof key
+	// Step 6: Sanitize the filename and build unique S3 key
 	base := filepath.Base(header.Filename)
 	base = strings.ReplaceAll(base, " ", "_")
 	if base == "" {
 		base = "upload.bin"
 	}
-	key := fmt.Sprintf(base)
+	// Make key unique to prevent collisions
+	timestamp := time.Now().Unix()
+	key := fmt.Sprintf("users/%d/boxes/%d/%d_%s", userID, boxID, timestamp, base)
 
+	// Step 7: Get content type
 	contentType := header.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	// Use request context with timeout so slow S3 calls don't hang the handler
+	// Step 8: Upload to S3 FIRST (before database)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
 	err = s3Operations.PutObject(ctx, h.S3, h.Bucket, key, contentType, file)
 	if err != nil {
-		// Return the actual error message to help debug (consider hiding in prod)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload file to S3: " + err.Error()})
 		return
 	}
 
+	// Step 9: Create the file record in database AFTER successful S3 upload
+	fileModel := &models.FileModel{
+		UserID: userID,
+		BoxID:  actualBoxID, // Use the box's actual database ID, not the custom BoxID
+		Name:   header.Filename,
+		Size:   size,
+		S3Key:  key,
+	}
+
+	result := db.Create(fileModel)
+	if result.Error != nil {
+		// If DB save fails, we should ideally delete from S3 (rollback)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "File uploaded but failed to save metadata",
+			"details": result.Error.Error(),
+		})
+		return
+	}
+
+	// Step 10: (Optional) Associate file with folder if folder_id provided
+
+	strFolderID := c.PostForm("folder_id")
+	if strFolderID != "" {
+		intFolderID, err := strconv.Atoi(strFolderID)
+		if err == nil && intFolderID > 0 {
+			var folder models.FolderModel
+			if err := db.First(&folder, uint(intFolderID)).Error; err == nil {
+				// Verify folder belongs to same box
+				if folder.BoxID == boxID {
+					db.Model(fileModel).Association("Folders").Append(&folder)
+				}
+			}
+		}
+	}
+
+	// Step 11: Return success response
 	c.JSON(http.StatusOK, gin.H{
-		"message": "file uploaded",
-		"bucket":  h.Bucket,
-		"key":     key,
-		"url":     fmt.Sprintf("s3://%s/%s", h.Bucket, key),
+		"message": "file uploaded successfully",
+		"file_id": fileModel.ID,
+		"name":    fileModel.Name,
+		"size":    fileModel.Size,
+		"s3_key":  key,
 	})
 }
 

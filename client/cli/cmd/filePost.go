@@ -29,13 +29,29 @@ func (pr *ProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-var filePathFlag string
+var (
+	filePathFlag string
+	userIDFlag   int
+	boxIDFlag    int64
+)
 
 var filePostCmd = &cobra.Command{
 	Use:   "post",
 	Short: "Upload a file to the API",
+	Long: `Upload a file to the Nimbus storage system.
+
+Example:
+  nimbus post -f myfile.txt --user 1 --box 12345`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		endpoint := "http://localhost:8080/v1/api/files"
+		// Validate required flags
+		if userIDFlag == 0 {
+			return fmt.Errorf("user ID is required (use --user flag)")
+		}
+		if boxIDFlag == 0 {
+			return fmt.Errorf("box ID is required (use --box flag)")
+		}
+
+		endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?user_id=%d&box_id=%d", userIDFlag, boxIDFlag)
 
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
@@ -55,6 +71,11 @@ var filePostCmd = &cobra.Command{
 
 		var body bytes.Buffer
 		w := multipart.NewWriter(&body)
+
+		// Note: user_id and box_id are sent as URL query parameters
+		fmt.Printf("📤 Sending user_id: %d (in URL)\n", userIDFlag)
+		fmt.Printf("📤 Sending box_id: %d (in URL)\n", boxIDFlag)
+
 		part, err := w.CreateFormFile("file", filepath.Base(filePathFlag))
 		if err != nil {
 			return err
@@ -67,6 +88,8 @@ var filePostCmd = &cobra.Command{
 		if err := w.Close(); err != nil {
 			return err
 		}
+
+		fmt.Printf("📦 Total request size: %d bytes\n", body.Len())
 
 		// Create progress bar for HTTP upload
 		bar := progressbar.DefaultBytes(
@@ -114,9 +137,11 @@ var filePostCmd = &cobra.Command{
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			fmt.Printf("✅ Successfully uploaded %s (%d bytes)\n", filepath.Base(filePathFlag), fileInfo.Size())
+			fmt.Printf("\n✅ Successfully uploaded %s (%d bytes)\n", filepath.Base(filePathFlag), fileInfo.Size())
 		} else {
 			errBody, _ := io.ReadAll(resp.Body)
+			fmt.Printf("\n❌ Upload failed: %s\n", resp.Status)
+			fmt.Printf("Server response: %s\n", string(errBody))
 			finalErr = fmt.Errorf("upload failed: %s — %s", resp.Status, string(errBody))
 			return finalErr
 		}
@@ -127,5 +152,9 @@ var filePostCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(filePostCmd)
 	filePostCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
+	filePostCmd.Flags().IntVar(&userIDFlag, "user", 0, "User ID (required)")
+	filePostCmd.Flags().Int64Var(&boxIDFlag, "box", 0, "Box ID (required)")
 	filePostCmd.MarkFlagRequired("file")
+	filePostCmd.MarkFlagRequired("user")
+	filePostCmd.MarkFlagRequired("box")
 }

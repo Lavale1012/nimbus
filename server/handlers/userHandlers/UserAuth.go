@@ -11,11 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func UserLogin(c *gin.Context, db *gorm.DB) {
-	// Implementation for user login
-
-}
-
 func isValidPassword(s string) (minLength, number, upper, lower, special bool) {
 	var hasNumber, hasUpper, hasLower, hasSpecial bool
 
@@ -43,6 +38,10 @@ func isValidPassword(s string) (minLength, number, upper, lower, special bool) {
 func isEmailValid(e string) bool {
 	emailRegex := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 	return emailRegex.MatchString(e)
+}
+func UserLogin(c *gin.Context, db *gorm.DB) {
+	// TODO: Implementation for user login
+
 }
 
 func UserRegister(c *gin.Context, db *gorm.DB) {
@@ -157,5 +156,5 @@ func UserRegister(c *gin.Context, db *gorm.DB) {
 	})
 }
 func UserLogout(c *gin.Context) {
-	// Implementation for user logout
+	// TODO: Implementation for user logout
 }
