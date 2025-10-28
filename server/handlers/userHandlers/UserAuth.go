@@ -1,15 +1,29 @@
 package userhandlers
 
 import (
+	"log"
 	"net/http"
 	"regexp"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
+	jwt "github.com/nimbus/api/middleware/auth/JWT"
 	"github.com/nimbus/api/models"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
 )
+
+const (
+	MAX_EMAIL_LENGTH    = 254
+	MAX_PASSWORD_LENGTH = 72
+	MIN_PASSWORD_LENGTH = 8
+	PASSKEY_LENGTH      = 4
+)
+
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
 
 func isValidPassword(s string) (minLength, number, upper, lower, special bool) {
 	var hasNumber, hasUpper, hasLower, hasSpecial bool
@@ -40,16 +54,58 @@ func isEmailValid(e string) bool {
 	return emailRegex.MatchString(e)
 }
 func UserLogin(c *gin.Context, db *gorm.DB) {
-	// TODO: Implementation for user login
+	var user models.UserModel
 
+	var loginRequest LoginRequest
+	if err := c.ShouldBindJSON(&loginRequest); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	if loginRequest.Email == "" || loginRequest.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email and password are required"})
+		return
+	}
+
+	if len(loginRequest.Email) > MAX_EMAIL_LENGTH {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	if !isEmailValid(loginRequest.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+		return
+	}
+
+	//Query user by email
+	err := db.Where("email = ?", loginRequest.Email).First(&user).Error
+	var isValid bool
+
+	if err != nil {
+		// User not found - do dummy hash check to maintain constant time
+		dummyHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+		utils.VerifyPasswordHash(loginRequest.Password, dummyHash)
+		isValid = false
+	} else {
+		isValid = utils.VerifyPasswordHash(loginRequest.Password, user.Password)
+	}
+
+	if !isValid {
+		log.Printf("Failed login attempt for email: %s from IP: %s ", loginRequest.Email, c.ClientIP())
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		return
+	}
+
+	// Generate JWT token
+	token, err := jwt.CreateToken(user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token})
 }
 
 func UserRegister(c *gin.Context, db *gorm.DB) {
-	// Implementation for user registration
-	const MAX_EMAIL_LENGTH = 254
-	const MAX_PASSWORD_LENGTH = 72
-	const MIN_PASSWORD_LENGTH = 8
-	const MAX_PASSKEY_LENGTH = 4
 
 	var user models.UserModel
 
@@ -87,8 +143,8 @@ func UserRegister(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	if len(user.PassKey) > MAX_PASSKEY_LENGTH {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Passkey exceeds maximum allowed length"})
+	if len(user.PassKey) > PASSKEY_LENGTH || len(user.PassKey) < PASSKEY_LENGTH {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Passkey must be exactly 4 characters long"})
 		return
 	}
 

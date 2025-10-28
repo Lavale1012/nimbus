@@ -48,7 +48,7 @@ func TestCheckPasswordHash_Success(t *testing.T) {
 	hash, err := utils.PasswordHash(password)
 	assert.NoError(t, err)
 
-	result := utils.CheckPasswordHash(password, hash)
+	result := utils.VerifyPasswordHash(password, hash)
 	assert.True(t, result, "Password should match its hash")
 }
 
@@ -60,7 +60,7 @@ func TestCheckPasswordHash_WrongPassword(t *testing.T) {
 	hash, err := utils.PasswordHash(password)
 	assert.NoError(t, err)
 
-	result := utils.CheckPasswordHash(wrongPassword, hash)
+	result := utils.VerifyPasswordHash(wrongPassword, hash)
 	assert.False(t, result, "Wrong password should not match hash")
 }
 
@@ -71,7 +71,7 @@ func TestCheckPasswordHash_EmptyPassword(t *testing.T) {
 	hash, err := utils.PasswordHash(password)
 	assert.NoError(t, err)
 
-	result := utils.CheckPasswordHash("", hash)
+	result := utils.VerifyPasswordHash("", hash)
 	assert.False(t, result, "Empty password should not match hash")
 }
 
@@ -80,7 +80,7 @@ func TestCheckPasswordHash_InvalidHash(t *testing.T) {
 	password := "CorrectPassword123!"
 	invalidHash := "not-a-valid-bcrypt-hash"
 
-	result := utils.CheckPasswordHash(password, invalidHash)
+	result := utils.VerifyPasswordHash(password, invalidHash)
 	assert.False(t, result, "Invalid hash should return false")
 }
 
@@ -91,7 +91,7 @@ func TestCheckPasswordHash_CaseSensitive(t *testing.T) {
 	hash, err := utils.PasswordHash(password)
 	assert.NoError(t, err)
 
-	result := utils.CheckPasswordHash("password123!", hash)
+	result := utils.VerifyPasswordHash("password123!", hash)
 	assert.False(t, result, "Password check should be case-sensitive")
 }
 
@@ -181,7 +181,7 @@ func BenchmarkCheckPasswordHash(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		utils.CheckPasswordHash(password, hash)
+		utils.VerifyPasswordHash(password, hash)
 	}
 }
 
