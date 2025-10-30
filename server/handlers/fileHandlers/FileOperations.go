@@ -161,9 +161,10 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	if base == "" {
 		base = "upload.bin"
 	}
+
 	// Make key unique to prevent collisions
 	timestamp := time.Now().Unix()
-	key := fmt.Sprintf("users/%d/boxes/%d/%d_%s", userID, boxID, timestamp, base)
+	key := fmt.Sprintf("%s%s_%d", user.BucketPrefix, base, timestamp)
 
 	// Step 7: Get content type
 	contentType := header.Header.Get("Content-Type")
