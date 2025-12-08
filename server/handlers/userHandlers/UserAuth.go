@@ -224,8 +224,8 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		return
 	}
 
-	// Step 13: Set bucket name after user creation (now we have the user.ID)
-	user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/files/", user.ID, user.Boxes[0].Name)
+	// Step 12: Set bucket name after user creation (so we have a valid user.ID)
+	user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, user.Boxes[0].Name)
 
 	// Update user with bucket name
 	if err := db.Save(&user).Error; err != nil {
@@ -233,11 +233,15 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		return
 	}
 
-	// Step 14: Return success with user ID
+	// Step 13: Return success (without exposing sensitive IDs)
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "User registered successfully",
 		"email":   user.Email,
-		"user_id": user.ID,
+		/*
+			TODO: If you need to return IDs, ensure they are safe to expose
+				"box_id":  boxID,
+				"user_id": user.ID,
+		*/
 	})
 }
 

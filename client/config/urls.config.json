@@ -1,0 +1,13 @@
+{
+  "Auth_Urls": {
+    "login": "/api/v1/auth/login",
+    "register": "/api/v1/auth/register",
+    "Logout": "/api/v1/auth/logout"
+  },
+  "file_Urls": {
+    "upload": "/api/v1/files/upload",
+    "download": "/api/v1/files/download",
+    "list": "/api/v1/files/list",
+    "delete": "/api/v1/files/delete"
+  }
+}

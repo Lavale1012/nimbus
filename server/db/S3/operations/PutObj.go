@@ -17,3 +17,13 @@ func PutObject(ctx context.Context, s3c *s3.Client, Bucket string, key string, c
 	})
 	return err
 }
+
+func MakeUserFolder(ctx context.Context, s3c *s3.Client, Bucket string, key string, contentType string) error {
+
+	_, err := s3c.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &Bucket,
+		Key:         &key,
+		ContentType: &contentType,
+	})
+	return err
+}

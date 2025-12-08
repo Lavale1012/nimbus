@@ -38,7 +38,7 @@ func TestUserRegister_Success(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	reqBody := map[string]string{
@@ -69,7 +69,7 @@ func TestUserRegister_MissingFields(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	testCases := []struct {
@@ -119,7 +119,7 @@ func TestUserRegister_InvalidEmail(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	invalidEmails := []string{
@@ -160,7 +160,7 @@ func TestUserRegister_WeakPassword(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	weakPasswords := []struct {
@@ -201,7 +201,7 @@ func TestUserRegister_DuplicateEmail(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	reqBody := map[string]string{
@@ -239,7 +239,7 @@ func TestUserRegister_PasswordTooLong(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	// Create a password longer than 72 characters
@@ -271,7 +271,7 @@ func TestUserRegister_HomeBoxCreation(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db)
+		userhandlers.UserRegister(c, db, nil)
 	})
 
 	reqBody := map[string]string{
