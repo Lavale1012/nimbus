@@ -99,12 +99,12 @@ func UserLogin(c *gin.Context, db *gorm.DB) {
 	}
 
 	// Generate JWT token
-	token, err := jwt.CreateToken(user.Email)
+	token, err := jwt.CreateToken(user.Email, fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token})
+	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email})
 }
 
 func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
@@ -225,7 +225,8 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 
 	// Step 12: Set bucket name after user creation (so we have a valid user.ID)
-	user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, user.Boxes[0].Name)
+	// user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, user.Boxes[0].Name)
+	// user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/", user.ID)
 
 	// Update user with bucket name
 	if err := db.Save(&user).Error; err != nil {
@@ -237,11 +238,7 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "User registered successfully",
 		"email":   user.Email,
-		/*
-			TODO: If you need to return IDs, ensure they are safe to expose
-				"box_id":  boxID,
-				"user_id": user.ID,
-		*/
+		"user_id": user.ID,
 	})
 }
 

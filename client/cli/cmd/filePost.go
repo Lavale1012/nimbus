@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nimbus/cli/cache"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -30,9 +31,8 @@ func (pr *ProgressReader) Read(p []byte) (int, error) {
 }
 
 var (
-	filePathFlag string
-	userIDFlag   int
-	boxIDFlag    int64
+	destinationFlag string
+	filePathFlag    string
 )
 
 var filePostCmd = &cobra.Command{
@@ -41,17 +41,23 @@ var filePostCmd = &cobra.Command{
 	Long: `Upload a file to the Nimbus storage system.
 
 Example:
-  nimbus post -f myfile.txt --user 1 --box 12345`,
+  nim post -f myfile.txt -d uploads/myfile.txt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		RDB, err := cache.NewRedisClient()
+		if err != nil {
+			panic(err)
+		}
+		if RDB == nil {
+			panic("failed to connect to Redis")
+		}
 		// Validate required flags
-		if userIDFlag == 0 {
-			return fmt.Errorf("user ID is required (use --user flag)")
+		if CurrentBox == "" {
+			return fmt.Errorf("CurrentBox is not set")
 		}
-		if boxIDFlag == 0 {
-			return fmt.Errorf("box ID is required (use --box flag)")
+		if destinationFlag == "" {
+			return fmt.Errorf("please provide --destination DESTINATION_PATH")
 		}
-
-		endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?user_id=%d&box_id=%d", userIDFlag, boxIDFlag)
+		endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
 
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
@@ -73,8 +79,7 @@ Example:
 		w := multipart.NewWriter(&body)
 
 		// Note: user_id and box_id are sent as URL query parameters
-		fmt.Printf("📤 Sending user_id: %d (in URL)\n", userIDFlag)
-		fmt.Printf("📤 Sending box_id: %d (in URL)\n", boxIDFlag)
+		fmt.Printf("📤 Sending box_name: %s (in URL)\n", CurrentBox)
 
 		part, err := w.CreateFormFile("file", filepath.Base(filePathFlag))
 		if err != nil {
@@ -122,7 +127,16 @@ Example:
 			return finalErr
 		}
 		req.Header.Set("Content-Type", w.FormDataContentType())
-
+		jwtToken, err := cache.GetAuthToken(RDB)
+		if err != nil {
+			finalErr = fmt.Errorf("failed to get auth token: %w", err)
+			return finalErr
+		}
+		if jwtToken == "" {
+			finalErr = fmt.Errorf("no auth token found, please login first")
+			return finalErr
+		}
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
 		// Add a request-scoped timeout (align with client timeout)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -137,10 +151,10 @@ Example:
 		defer resp.Body.Close()
 
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			fmt.Printf("\n✅ Successfully uploaded %s (%d bytes)\n", filepath.Base(filePathFlag), fileInfo.Size())
+			fmt.Printf("\nSuccessfully uploaded %s (%d bytes)\n", filepath.Base(filePathFlag), fileInfo.Size())
 		} else {
 			errBody, _ := io.ReadAll(resp.Body)
-			fmt.Printf("\n❌ Upload failed: %s\n", resp.Status)
+			fmt.Printf("\nUpload failed: %s\n", resp.Status)
 			fmt.Printf("Server response: %s\n", string(errBody))
 			finalErr = fmt.Errorf("upload failed: %s — %s", resp.Status, string(errBody))
 			return finalErr
@@ -152,9 +166,9 @@ Example:
 func init() {
 	rootCmd.AddCommand(filePostCmd)
 	filePostCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
-	filePostCmd.Flags().IntVar(&userIDFlag, "user", 0, "User ID (required)")
-	filePostCmd.Flags().Int64Var(&boxIDFlag, "box", 0, "Box ID (required)")
+	filePostCmd.Flags().StringVarP(&destinationFlag, "destination", "dest", "", "Path to file to upload (required)")
+
 	filePostCmd.MarkFlagRequired("file")
-	filePostCmd.MarkFlagRequired("user")
-	filePostCmd.MarkFlagRequired("box")
+	filePostCmd.MarkFlagRequired("destination")
+
 }

@@ -18,8 +18,19 @@ import (
 )
 
 func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
+	user, err := jwt.AuthenticateUser(c, db)
+	if err != nil {
+		return // Error response already sent by authenticateUser
+	}
+
 	if d.S3 == nil || d.Bucket == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "downloader not configured: missing S3 client or bucket"})
+		return
+	}
+
+	BoxName := c.Query("box_name")
+	if BoxName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "box name is required"})
 		return
 	}
 	key := c.Query("key")
@@ -27,7 +38,13 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file key is required"})
 		return
 	}
+	// box, err := helpers.ValidateBoxOwnership(db, boxID, user.ID)
+	// if err != nil {
+	// 	c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	// 	return
+	// }
 
+	keyPath := fmt.Sprintf("users/nim-user-%v/boxes/%s/%s", user.ID, BoxName, key)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
@@ -48,7 +65,7 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	// Proceed with downloading the file from S3
 	obj, err := d.S3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &d.Bucket,
-		Key:    &key,
+		Key:    &keyPath,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get object: %v", err)})
@@ -75,6 +92,7 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 }
 
 func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
+	filepath := c.Query("filePath")
 	// 1. Authenticate user from JWT token
 	user, err := jwt.AuthenticateUser(c, db)
 	if err != nil {
@@ -88,12 +106,12 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	}
 
 	// 3. Parse and validate box_id
-	boxID, err := helpers.ParseBoxID(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
+	// boxID, err := helpers.ParseBoxID(c)
+	// if err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	boxName := c.Query("box_name")
 	// 4. Get and validate uploaded file
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -108,14 +126,18 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 	}
 
 	// 5. Verify box ownership
-	box, err := helpers.ValidateBoxOwnership(db, boxID, user.ID)
+	box, err := helpers.ValidateBoxOwnership(db, boxName, user.ID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
 	// 6. Generate unique S3 key
-	s3Key := helpers.GenerateS3Key(user.BucketPrefix, header.Filename)
+	s3Key, err := helpers.GenerateS3Key(filepath, header.Filename, boxName, user)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// 7. Determine content type
 	contentType := header.Header.Get("Content-Type")
@@ -138,7 +160,6 @@ func UploadFile(h config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 		BoxID:  box.ID,
 		Name:   header.Filename,
 		Size:   header.Size,
-		S3Key:  s3Key,
 	}
 
 	if err := db.Create(fileModel).Error; err != nil {

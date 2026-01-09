@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
 	postgres "github.com/nimbus/api/db/Postgres/config"
 	aws "github.com/nimbus/api/db/S3/config"
 	config "github.com/nimbus/api/db/S3/config"

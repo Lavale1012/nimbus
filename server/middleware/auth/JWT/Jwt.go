@@ -15,7 +15,7 @@ import (
 
 var secretKey []byte
 
-func CreateToken(email string) (string, error) {
+func CreateToken(email, userID string) (string, error) {
 	secret, err := utils.GetEnv("JWT_SECRET")
 	if err != nil {
 		return "", err
@@ -23,8 +23,9 @@ func CreateToken(email string) (string, error) {
 	secretKey = []byte(secret)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
-			"email": email,
-			"exp":   time.Now().Add(time.Hour * 24).Unix(),
+			"user_id": userID,
+			"email":   email,
+			"exp":     time.Now().Add(time.Hour * 24).Unix(),
 		})
 
 	tokenString, err := token.SignedString(secretKey)

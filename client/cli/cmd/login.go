@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,6 +27,8 @@ type LoginRequest struct {
 type loginResponse struct {
 	Message string `json:"message"`
 	Token   string `json:"token"`
+	Email   string `json:"email"`
+	UserID  string `json:"user_id"`
 }
 
 func isEmailValid(e string) bool {
@@ -123,16 +124,17 @@ var loginCmd = &cobra.Command{
 		}
 
 		// Store JWT token and email in Redis cache
-		ctx := context.Background()
-		err = redisClient.HSet(ctx, "user:session", map[string]interface{}{
-			"email":     loginRequest.Email,
-			"JWT_Token": loginResponse.Token,
-		}).Err()
+		// ctx := context.Background()
+		// err = redisClient.HSet(ctx, "user:session", map[string]interface{}{
+		// 	"email":     loginRequest.Email,
+		// 	"JWT_Token": loginResponse.Token,
+		// }).Err()
+		err = cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Token)
 		if err != nil {
 			return fmt.Errorf("failed to cache session: %w", err)
 		}
 		fmt.Println("Login successful")
-		fmt.Printf("Welcome back, %s\n", loginRequest.Email)
+		fmt.Printf("Welcome back, %s\n", loginResponse.Email)
 
 		// Perform login logic, e.g., send loginRequest to server API
 

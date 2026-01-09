@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -20,4 +21,32 @@ func NewRedisClient() (*redis.Client, error) {
 	}
 	println("Redis connected:", pong)
 	return rdb, nil
+}
+
+func GetAuthToken(rdb *redis.Client) (string, error) {
+	ctx := context.Background()
+	key := "user:session"
+	field := "JWT_Token"
+	token, err := rdb.HGet(ctx, key, field).Result()
+	if err == redis.Nil {
+		return "", errors.New("session not found") // Token does not exist
+	} else if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func SetAuthToken(rdb *redis.Client, UserID, email, token string) error {
+	ctx := context.Background()
+	key := "user:session"
+	field := map[string]interface{}{
+		"JWT_Token": token,
+		"Email":     email,
+		"UserID":    UserID,
+	}
+	err := rdb.HSet(ctx, key, field).Err()
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -13,39 +13,40 @@ import (
 )
 
 // Helper function: Parse box_id from query parameters
-func ParseBoxID(c *gin.Context) (uint, error) {
-	strBoxID := c.Query("box_id")
-	if strBoxID == "" {
-		return 0, fmt.Errorf("box_id is required")
-	}
+// func ParseBoxID(c *gin.Context) (uint, error) {
+// 	strBoxID := c.Query("box_id")
+// 	if strBoxID == "" {
+// 		return 0, fmt.Errorf("box_id is required")
+// 	}
 
-	intBoxID, err := strconv.Atoi(strBoxID)
-	if err != nil || intBoxID <= 0 {
-		return 0, fmt.Errorf("invalid box_id")
-	}
+// 	intBoxID, err := strconv.Atoi(strBoxID)
+// 	if err != nil || intBoxID <= 0 {
+// 		return 0, fmt.Errorf("invalid box_id")
+// 	}
 
-	return uint(intBoxID), nil
-}
+// 	return uint(intBoxID), nil
+// }
 
 // Helper function: Validate box exists and belongs to user
-func ValidateBoxOwnership(db *gorm.DB, boxID, userID uint) (*models.BoxModel, error) {
+func ValidateBoxOwnership(db *gorm.DB, boxName string, userID uint) (*models.BoxModel, error) {
 	var box models.BoxModel
-	if err := db.Where("box_id = ? AND user_id = ?", boxID, userID).First(&box).Error; err != nil {
+	if err := db.Where("name = ? AND user_id = ?", boxName, userID).First(&box).Error; err != nil {
 		return nil, fmt.Errorf("box not found or access denied")
 	}
 	return &box, nil
 }
 
 // Helper function: Generate unique S3 key
-func GenerateS3Key(bucketPrefix, filename string) string {
+func GenerateS3Key(filePath, filename, boxName string, user *models.UserModel) (string, error) {
+	fullFilePathPrefix := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, boxName)
 	base := filepath.Base(filename)
 	base = strings.ReplaceAll(base, " ", "_")
 	if base == "" {
-		base = "upload.bin"
+		return "", fmt.Errorf("invalid filename")
 	}
-
 	timestamp := time.Now().Unix()
-	return fmt.Sprintf("%s%s_%d", bucketPrefix, base, timestamp)
+	fullPath := fmt.Sprintf("%s%s/%s_%d", fullFilePathPrefix, filePath, base, timestamp)
+	return fullPath, nil
 }
 
 // Helper function: Associate file with folder if provided
