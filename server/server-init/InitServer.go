@@ -14,7 +14,7 @@ import (
 	"github.com/nimbus/api/routes"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
-)
+) 
 
 var S3 *s3.Client
 var DB *gorm.DB

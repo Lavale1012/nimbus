@@ -45,11 +45,9 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		if RDB == nil {
-			panic("failed to connect to Redis")
-		}
+		defer RDB.Close()
 		// Validate required flags
 		if CurrentBox == "" {
 			return fmt.Errorf("CurrentBox is not set")
@@ -83,15 +81,15 @@ Example:
 
 		part, err := w.CreateFormFile("file", filepath.Base(filePathFlag))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create form file: %w", err)
 		}
 
 		// Copy file to multipart form (no progress bar here)
 		if _, err := io.Copy(part, f); err != nil {
-			return err
+			return fmt.Errorf("failed to copy file to form: %w", err)
 		}
 		if err := w.Close(); err != nil {
-			return err
+			return fmt.Errorf("failed to close multipart writer: %w", err)
 		}
 
 		fmt.Printf("📦 Total request size: %d bytes\n", body.Len())

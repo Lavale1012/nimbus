@@ -38,13 +38,13 @@ func DownloadFile(d config.AWS3ConfigFile, db *gorm.DB, c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file key is required"})
 		return
 	}
-	// box, err := helpers.ValidateBoxOwnership(db, boxID, user.ID)
-	// if err != nil {
-	// 	c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-	// 	return
-	// }
+	box, err := helpers.ValidateBoxOwnership(db, BoxName, user.ID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
 
-	keyPath := fmt.Sprintf("users/nim-user-%v/boxes/%s/%s", user.ID, BoxName, key)
+	keyPath := fmt.Sprintf("users/nim-user-%v/boxes/%s/%s", user.ID, box.Name, key)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
