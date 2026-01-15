@@ -130,6 +130,9 @@ temp/
 postgres_data/
 localstack_data/
 
+# Docker auto-generated files (keeping .dockerignore, compose.yaml, and Dockerfiles tracked)
+.docker/
+
 # Terraform
 *.tfstate
 *.tfstate.*
@@ -160,3 +163,12 @@ config.local.*
 # Development certificates
 localhost.pem
 localhost-key.pem
+
+# Nginx runtime files (keeping config files tracked)
+**/nginx/*.pid
+**/nginx/logs/
+**/nginx/cache/
+**/nginx/tmp/
+
+# Go module cache
+go.sum.backup
