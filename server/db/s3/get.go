@@ -1,4 +1,4 @@
-package s3Operations
+package s3
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-func GetObj(ctx context.Context, s3c *s3.Client, bucket string, key string, outPath string) error {
-	obj, err := s3c.GetObject(ctx, &s3.GetObjectInput{
+func GetObject(ctx context.Context, client *s3.Client, bucket string, key string, outPath string) error {
+	obj, err := client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
 	})

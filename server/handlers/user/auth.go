@@ -1,4 +1,4 @@
-package userhandlers
+package user
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
-	jwt "github.com/nimbus/api/middleware/auth/JWT"
+	"github.com/nimbus/api/middleware/jwt"
 	"github.com/nimbus/api/models"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
@@ -55,8 +55,8 @@ func isEmailValid(e string) bool {
 	emailRegex := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 	return emailRegex.MatchString(e)
 }
-func UserLogin(c *gin.Context, db *gorm.DB) {
-	var user models.UserModel
+func Login(c *gin.Context, db *gorm.DB) {
+	var user models.User
 
 	var loginRequest LoginRequest
 	if err := c.ShouldBindJSON(&loginRequest); err != nil {
@@ -107,9 +107,9 @@ func UserLogin(c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email})
 }
 
-func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
+func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 
-	var user models.UserModel
+	var user models.User
 
 	// Step 1: Bind JSON from request
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -160,7 +160,7 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 
 	// Step 6: Check if email already exists
-	var existingUser models.UserModel
+	var existingUser models.User
 	if err := db.Where("email = ?", user.Email).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
@@ -190,7 +190,7 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 
 	// Check for ID collision (very rare but possible)
-	var existingUserByID models.UserModel
+	var existingUserByID models.User
 	for {
 		if err := db.First(&existingUserByID, userID).Error; err != nil {
 			// ID doesn't exist, we can use it
@@ -213,7 +213,7 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 
 	// Step 11: Create user with home box
-	user.Boxes = []models.BoxModel{{
+	user.Boxes = []models.Box{{
 		Name:  "Home-Box",
 		BoxID: boxID,
 	}}
@@ -223,10 +223,6 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
-
-	// Step 12: Set bucket name after user creation (so we have a valid user.ID)
-	// user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, user.Boxes[0].Name)
-	// user.BucketPrefix = fmt.Sprintf("users/nim-user-%d/boxes/", user.ID)
 
 	// Update user with bucket name
 	if err := db.Save(&user).Error; err != nil {
@@ -242,6 +238,6 @@ func UserRegister(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	})
 }
 
-func UserLogout(c *gin.Context) {
+func Logout(c *gin.Context) {
 	// TODO: Implementation for user logout
 }

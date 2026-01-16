@@ -68,7 +68,7 @@ func GetEmailFromToken(tokenString string) (string, error) {
 	return "", fmt.Errorf("invalid token claims")
 }
 
-func AuthenticateUser(c *gin.Context, db *gorm.DB) (*models.UserModel, error) {
+func AuthenticateUser(c *gin.Context, db *gorm.DB) (*models.User, error) {
 	authToken := c.GetHeader("Authorization")
 	if authToken == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization token"})
@@ -88,7 +88,7 @@ func AuthenticateUser(c *gin.Context, db *gorm.DB) (*models.UserModel, error) {
 		return nil, err
 	}
 
-	var user models.UserModel
+	var user models.User
 	if err := db.Where("email = ?", email).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return nil, err

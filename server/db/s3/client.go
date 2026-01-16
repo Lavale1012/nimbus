@@ -1,4 +1,4 @@
-package aws
+package s3
 
 import (
 	"context"
@@ -7,13 +7,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-type AWS3ConfigFile struct {
-	S3     *s3.Client
+type Config struct {
+	Client *s3.Client
 	Bucket string
 }
 
-func ConnectToS3(ctx context.Context, region string) (*s3.Client, error) {
-	// Implementation for connecting to S3
+func Connect(ctx context.Context, region string) (*s3.Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
 		return nil, err

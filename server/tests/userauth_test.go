@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	userhandlers "github.com/nimbus/api/handlers/userHandlers"
+	"github.com/nimbus/api/handlers/user"
 	"github.com/nimbus/api/models"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 
 	// Auto-migrate the schema
-	err = db.AutoMigrate(&models.UserModel{}, &models.BoxModel{}, &models.FolderModel{}, &models.FileModel{})
+	err = db.AutoMigrate(&models.User{}, &models.Box{}, &models.Folder{}, &models.File{})
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestUserRegister_Success(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	reqBody := map[string]string{
@@ -69,7 +69,7 @@ func TestUserRegister_MissingFields(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	testCases := []struct {
@@ -119,7 +119,7 @@ func TestUserRegister_InvalidEmail(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	invalidEmails := []string{
@@ -160,7 +160,7 @@ func TestUserRegister_WeakPassword(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	weakPasswords := []struct {
@@ -201,7 +201,7 @@ func TestUserRegister_DuplicateEmail(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	reqBody := map[string]string{
@@ -239,7 +239,7 @@ func TestUserRegister_PasswordTooLong(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	// Create a password longer than 72 characters
@@ -271,7 +271,7 @@ func TestUserRegister_HomeBoxCreation(t *testing.T) {
 
 	router := gin.New()
 	router.POST("/register", func(c *gin.Context) {
-		userhandlers.UserRegister(c, db, nil)
+		user.Register(c, db, nil)
 	})
 
 	reqBody := map[string]string{
@@ -289,11 +289,11 @@ func TestUserRegister_HomeBoxCreation(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	// Verify that a box was created for the user
-	var user models.UserModel
-	db.Preload("Boxes").Where("email = ?", "test@example.com").First(&user)
+	var userModel models.User
+	db.Preload("Boxes").Where("email = ?", "test@example.com").First(&userModel)
 
-	assert.NotZero(t, user.ID)
-	assert.Equal(t, 1, len(user.Boxes))
-	assert.Equal(t, "Home-Box", user.Boxes[0].Name)
-	assert.NotZero(t, user.Boxes[0].BoxID)
+	assert.NotZero(t, userModel.ID)
+	assert.Equal(t, 1, len(userModel.Boxes))
+	assert.Equal(t, "Home-Box", userModel.Boxes[0].Name)
+	assert.NotZero(t, userModel.Boxes[0].BoxID)
 }

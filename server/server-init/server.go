@@ -8,19 +8,18 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	postgres "github.com/nimbus/api/db/Postgres/config"
-	aws "github.com/nimbus/api/db/S3/config"
-	config "github.com/nimbus/api/db/S3/config"
+	"github.com/nimbus/api/db/postgres"
+	s3db "github.com/nimbus/api/db/s3"
 	"github.com/nimbus/api/routes"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
-) 
+)
 
 var S3 *s3.Client
 var DB *gorm.DB
 
 func InitServer() error {
-	bucket, err := utils.GetEnv("S3_BUCKET") // TODO: A function will get this data
+	bucket, err := utils.GetEnv("S3_BUCKET")
 	if err != nil {
 		return err
 	}
@@ -30,27 +29,27 @@ func InitServer() error {
 
 	ctx := context.Background()
 
-	region, err := utils.GetEnv("AWS_REGION") // TODO: A function will get this data
+	region, err := utils.GetEnv("AWS_REGION")
 	if err != nil {
 		return err
 	}
 
-	s3, err := aws.ConnectToS3(ctx, region)
+	s3Client, err := s3db.Connect(ctx, region)
 	if err != nil {
 		return err
 	}
 
-	S3 = s3
+	S3 = s3Client
 	if S3 == nil {
 		return fmt.Errorf("failed to connect to S3")
 	}
 
-	config := config.AWS3ConfigFile{
-		S3:     S3,
+	config := s3db.Config{
+		Client: S3,
 		Bucket: bucket,
 	}
 
-	DB, err = postgres.ConnectPostgres()
+	DB, err = postgres.Connect()
 	if err != nil {
 		return err
 	}

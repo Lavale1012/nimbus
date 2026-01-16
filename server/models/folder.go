@@ -2,7 +2,7 @@ package models
 
 import "gorm.io/gorm"
 
-type FolderModel struct {
+type Folder struct {
 	gorm.Model
 	ID       uint   `gorm:"primaryKey" json:"id"`
 	Name     string `gorm:"not null" json:"name"`

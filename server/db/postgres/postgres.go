@@ -1,4 +1,4 @@
-package config
+package postgres
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func ConnectPostgres() (*gorm.DB, error) {
+func Connect() (*gorm.DB, error) {
 	dsn, err := utils.GetEnv("DATABASE_URL")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get DATABASE_URL from environment: %w", err)
@@ -22,10 +22,10 @@ func ConnectPostgres() (*gorm.DB, error) {
 
 	// Auto-migrate the schema
 	err = db.AutoMigrate(
-		&models.UserModel{},
-		&models.BoxModel{},
-		&models.FolderModel{},
-		&models.FileModel{},
+		&models.User{},
+		&models.Box{},
+		&models.Folder{},
+		&models.File{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to auto-migrate database schema: %w", err)

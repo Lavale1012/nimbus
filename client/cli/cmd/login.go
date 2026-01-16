@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	banner "github.com/nimbus/cli/Banner"
+	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"

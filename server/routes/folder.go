@@ -2,21 +2,21 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
-	config "github.com/nimbus/api/db/S3/config"
-	folderhandlers "github.com/nimbus/api/handlers/folderHandlers"
+	s3db "github.com/nimbus/api/db/s3"
+	"github.com/nimbus/api/handlers/folder"
 )
 
-func InitFolderRoutes(r *gin.Engine, config config.AWS3ConfigFile) {
+func InitFolderRoutes(r *gin.Engine, config s3db.Config) {
 	route := r.Group("v1/api")
 	{
 		route.GET("/folders", func(c *gin.Context) {
-			folderhandlers.DownloadFolder(config, c)
+			folder.Download(config, c)
 		})
 		route.POST("/folders", func(c *gin.Context) {
-			folderhandlers.CreateFolder(config, c)
+			folder.Create(config, c)
 		})
 		route.POST("/folders/upload", func(c *gin.Context) {
-			folderhandlers.UploadFolder(config, c)
+			folder.Upload(config, c)
 		})
 		route.DELETE("/folders/:id", func(c *gin.Context) {
 			// Implement delete folder handler here

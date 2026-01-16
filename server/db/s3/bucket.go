@@ -1,4 +1,4 @@
-package s3Operations
+package s3
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-func MakeBucket(ctx context.Context, s3c *s3.Client, bucket string, region string) error {
+func MakeBucket(ctx context.Context, client *s3.Client, bucket string, region string) error {
 	input := &s3.CreateBucketInput{
 		Bucket: &bucket,
 	}
@@ -20,6 +20,6 @@ func MakeBucket(ctx context.Context, s3c *s3.Client, bucket string, region strin
 		}
 	}
 
-	_, err := s3c.CreateBucket(ctx, input)
+	_, err := client.CreateBucket(ctx, input)
 	return err
 }

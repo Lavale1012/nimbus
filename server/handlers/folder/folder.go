@@ -1,4 +1,4 @@
-package folderhandlers
+package folder
 
 import (
 	"context"
@@ -9,18 +9,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
-	config "github.com/nimbus/api/db/S3/config"
+	s3db "github.com/nimbus/api/db/s3"
 )
 
-// TODO: Implement folder operations with Postgres integration, these varibales will hold current folder state and ID, functions for theses need to be implemented
+// TODO: Implement folder operations with Postgres integration
 var CurrentFolder string
 var FolderID uint = 34567890
 
-func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
-	// Implementation for creating a folder
+func Create(h s3db.Config, c *gin.Context) {
 	const slash string = "/"
 	const MAX_FOLDER_NAME_LENGTH int8 = 25
-	if h.Bucket == "" || h.S3 == nil {
+	if h.Bucket == "" || h.Client == nil {
 		c.JSON(500, gin.H{"error": "S3 client or bucket not configured"})
 		return
 	}
@@ -30,8 +29,6 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 		c.JSON(400, gin.H{"error": "folder name is required"})
 		return
 	}
-
-	// TODO: check if folder already exists
 
 	if int8(len(foldername)) > MAX_FOLDER_NAME_LENGTH {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("folder name must be at most %d characters", MAX_FOLDER_NAME_LENGTH)})
@@ -47,7 +44,7 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
-	_, err := h.S3.PutObject(ctx, &s3.PutObjectInput{
+	_, err := h.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &h.Bucket,
 		Key:    &key,
 		Body:   strings.NewReader(""),
@@ -60,13 +57,12 @@ func CreateFolder(h config.AWS3ConfigFile, c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Folder created successfully", "folder": key})
 }
 
-func DownloadFolder(h config.AWS3ConfigFile, c *gin.Context) {}
-func UploadFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
-func DeleteFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
-func ListFolders(h config.AWS3ConfigFile, c *gin.Context)    {}
-func MoveFolder(h config.AWS3ConfigFile, c *gin.Context)     {}
-func RenameFolder(h config.AWS3ConfigFile, c *gin.Context)   {}
-func CurrentFolderPath(h config.AWS3ConfigFile, c *gin.Context) (string, uint, error) {
-	// Implementation for getting the current folder path
+func Download(h s3db.Config, c *gin.Context) {}
+func Upload(h s3db.Config, c *gin.Context)   {}
+func Delete(h s3db.Config, c *gin.Context)   {}
+func List(h s3db.Config, c *gin.Context)     {}
+func Move(h s3db.Config, c *gin.Context)     {}
+func Rename(h s3db.Config, c *gin.Context)   {}
+func CurrentPath(h s3db.Config, c *gin.Context) (string, uint, error) {
 	return CurrentFolder, FolderID, nil
 }

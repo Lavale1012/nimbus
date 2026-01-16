@@ -1,4 +1,4 @@
-package boxhandlers
+package box
 
 var BoxName string = "MyBox"
 var BoxID uint = 23432134
