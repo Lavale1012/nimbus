@@ -27,7 +27,13 @@ var logoutCmd = &cobra.Command{
 			fmt.Println("You are not logged in.")
 			return nil
 		}
-
+		fmt.Printf("Are you sure you want to logout? [Y/N]: ")
+		var response string
+		fmt.Scanln(&response)
+		if response != "Y" && response != "y" {
+			fmt.Println("Logout cancelled.")
+			return nil
+		}
 		err = cache.ClearAuthToken(rdb)
 		if err != nil {
 			return fmt.Errorf("failed to clear session: %w", err)

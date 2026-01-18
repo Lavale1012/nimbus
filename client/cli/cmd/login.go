@@ -14,23 +14,12 @@ import (
 
 	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/cli/types"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
-
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-type loginResponse struct {
-	Message string `json:"message"`
-	Token   string `json:"token"`
-	Email   string `json:"email"`
-	UserID  uint   `json:"user_id"`
-}
 
 func isEmailValid(e string) bool {
 	emailRegex := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -40,7 +29,7 @@ func isEmailValid(e string) bool {
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "",
+	Short: "Authenticate with your Nimbus account",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Implement the login functionality here
@@ -57,8 +46,8 @@ var loginCmd = &cobra.Command{
 			return nil
 		}
 		defer redisClient.Close()
-		var loginResponse loginResponse
-		var loginRequest LoginRequest
+		var loginResponse types.LoginResponse
+		var loginRequest types.LoginRequest
 		// Populate loginRequest with user input (e.g., flags or prompts)
 
 		banner.ShowLoginBanner()
@@ -81,7 +70,8 @@ var loginCmd = &cobra.Command{
 
 		// For demonstration, print the login request
 		MarshaledRequest, _ := json.Marshal(loginRequest)
-		endpoint := "http://localhost:8080/v1/api/auth/users/login"
+		// endpoint := "http://localhost:8080/v1/api/auth/users/login"
+		endpoint := "http://nim.local/v1/api/auth/login"
 		req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(MarshaledRequest))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
@@ -131,14 +121,7 @@ var loginCmd = &cobra.Command{
 		if err := json.NewDecoder(resp.Body).Decode(&loginResponse); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
-
-		// Store JWT token and email in Redis cache
-		// ctx := context.Background()
-		// err = redisClient.HSet(ctx, "user:session", map[string]interface{}{
-		// 	"email":     loginRequest.Email,
-		// 	"JWT_Token": loginResponse.Token,
-		// }).Err()
-		err = cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Token)
+		err = cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Box, loginResponse.Token)
 		if err != nil {
 			return fmt.Errorf("failed to cache session: %w", err)
 		}

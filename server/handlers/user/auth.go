@@ -235,5 +235,6 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		"message": "User registered successfully",
 		"email":   user.Email,
 		"user_id": user.ID,
+		"box":     user.Boxes[0].Name,
 	})
 }

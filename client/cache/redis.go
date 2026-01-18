@@ -35,14 +35,14 @@ func GetAuthToken(rdb *redis.Client) (string, error) {
 	return token, nil
 }
 
-func SetAuthToken(rdb *redis.Client, UserID uint, email, token string) error {
+func SetAuthToken(rdb *redis.Client, userID uint, email, box, token string) error {
 	ctx := context.Background()
 	key := "user:session"
 	field := map[string]interface{}{
 		"JWT_Token":  token,
 		"Email":      email,
-		"UserID":     UserID,
-		"CurrentBox": "HomeBox",
+		"UserID":     userID,
+		"CurrentBox": box,
 	}
 	err := rdb.HSet(ctx, key, field).Err()
 	if err != nil {

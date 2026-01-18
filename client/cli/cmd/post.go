@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -48,6 +49,13 @@ Example:
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer RDB.Close()
+		IsLoggedIn, err := helpers.SessionExists(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to check login status: %w", err)
+		}
+		if !IsLoggedIn {
+			return fmt.Errorf("you are not logged in, please login first")
+		}
 		// Validate required flags
 		CurrentBox, err := cache.GetBoxName(RDB)
 		if err != nil {
@@ -57,7 +65,8 @@ Example:
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
+		// endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
+		endpoint := fmt.Sprintf("http://nim.local/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
 
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
