@@ -237,7 +237,3 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		"user_id": user.ID,
 	})
 }
-
-func Logout(c *gin.Context) {
-	// TODO: Implementation for user logout
-}

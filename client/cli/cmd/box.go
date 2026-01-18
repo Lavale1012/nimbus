@@ -6,10 +6,9 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/nimbus/cli/cache"
 	"github.com/spf13/cobra"
 )
-
-var CurrentBox string
 
 // setCurrentBoxCmd represents the setCurrentBox command
 var setCurrentBoxCmd = &cobra.Command{
@@ -18,24 +17,25 @@ var setCurrentBoxCmd = &cobra.Command{
 	Long:  `Set the current active box for file operations.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		CurrentBox = args[0]
+		RDB, err := cache.NewRedisClient()
+		if err != nil {
+			return fmt.Errorf("failed to create Redis client: %w", err)
+		}
+		defer RDB.Close()
+		CurrentBox := args[0]
 		if CurrentBox == "" {
 			return fmt.Errorf("please provide box name")
 		}
+		err = cache.SetBoxName(RDB, CurrentBox)
+		if err != nil {
+			return fmt.Errorf("failed to set current box in cache: %w", err)
+		}
+		fmt.Printf("Current box set to: %s\n", CurrentBox)
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(setCurrentBoxCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
 	setCurrentBoxCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// setCurrentBoxCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

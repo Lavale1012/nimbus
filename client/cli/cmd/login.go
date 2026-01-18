@@ -14,6 +14,7 @@ import (
 
 	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -28,7 +29,7 @@ type loginResponse struct {
 	Message string `json:"message"`
 	Token   string `json:"token"`
 	Email   string `json:"email"`
-	UserID  string `json:"user_id"`
+	UserID  uint   `json:"user_id"`
 }
 
 func isEmailValid(e string) bool {
@@ -46,6 +47,14 @@ var loginCmd = &cobra.Command{
 		redisClient, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
+		}
+		SessionExist, err := helpers.SessionExists(redisClient)
+		if err != nil {
+			return fmt.Errorf("failed to check session existence: %w", err)
+		}
+		if SessionExist {
+			fmt.Println("You are already logged in.")
+			return nil
 		}
 		defer redisClient.Close()
 		var loginResponse loginResponse

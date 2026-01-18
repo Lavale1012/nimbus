@@ -166,6 +166,7 @@ func Upload(h s3db.Config, db *gorm.DB, c *gin.Context) {
 		BoxID:  box.ID,
 		Name:   header.Filename,
 		Size:   header.Size,
+		S3Key:  s3Key,
 	}
 
 	if err := db.Create(fileModel).Error; err != nil {

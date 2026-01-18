@@ -15,11 +15,10 @@ func NewRedisClient() (*redis.Client, error) {
 		DB:       0,                // Use default DB
 	})
 
-	pong, err := rdb.Ping(ctx).Result()
+	_, err := rdb.Ping(ctx).Result()
 	if err != nil {
 		return nil, err
 	}
-	println("Redis connected:", pong)
 	return rdb, nil
 }
 
@@ -36,17 +35,52 @@ func GetAuthToken(rdb *redis.Client) (string, error) {
 	return token, nil
 }
 
-func SetAuthToken(rdb *redis.Client, UserID, email, token string) error {
+func SetAuthToken(rdb *redis.Client, UserID uint, email, token string) error {
 	ctx := context.Background()
 	key := "user:session"
 	field := map[string]interface{}{
-		"JWT_Token": token,
-		"Email":     email,
-		"UserID":    UserID,
+		"JWT_Token":  token,
+		"Email":      email,
+		"UserID":     UserID,
+		"CurrentBox": "HomeBox",
 	}
 	err := rdb.HSet(ctx, key, field).Err()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func ClearAuthToken(rdb *redis.Client) error {
+	ctx := context.Background()
+	key := "user:session"
+	err := rdb.Del(ctx, key).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func SetBoxName(rdb *redis.Client, boxName string) error {
+	ctx := context.Background()
+	key := "user:session"
+	field := "CurrentBox"
+	err := rdb.HSet(ctx, key, field, boxName).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetBoxName(rdb *redis.Client) (string, error) {
+	ctx := context.Background()
+	key := "user:session"
+	field := "CurrentBox"
+	boxName, err := rdb.HGet(ctx, key, field).Result()
+	if err == redis.Nil {
+		return "", errors.New("box name not found") // Box name does not exist
+	} else if err != nil {
+		return "", err
+	}
+	return boxName, nil
 }

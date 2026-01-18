@@ -23,7 +23,7 @@ func ValidateBoxOwnership(db *gorm.DB, boxName string, userID uint) (*models.Box
 
 // GenerateS3Key generates a unique S3 key
 func GenerateS3Key(filePath, filename, boxName string, user *models.User) (string, error) {
-	fullFilePathPrefix := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, boxName)
+	fullFilePathPrefix := fmt.Sprintf("users/nim-user-%d/boxes/%s", user.ID, boxName)
 	base := filepath.Base(filename)
 	base = strings.ReplaceAll(base, " ", "_")
 	if base == "" {
@@ -52,39 +52,44 @@ func AssociateFileWithFolder(db *gorm.DB, c *gin.Context, fileModel *models.File
 	}
 
 	// Only associate if folder belongs to the same box
+	// if folder.BoxID == boxID {
+	// 	db.Model(fileModel).Association("Folders").Append(&folder)
+	// }
 	if folder.BoxID == boxID {
-		db.Model(fileModel).Association("Folders").Append(&folder)
+		fid := uint(folderID)
+		fileModel.FolderID = &fid
+		db.Save(fileModel)
 	}
 }
 
-// reverseString reverses a string, handling Unicode correctly.
-func ReverseString(s string) string {
-	runes := []rune(s) // Convert to runes for Unicode safety
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i] // Swap runes
-	}
-	return string(runes)
-}
+// // reverseString reverses a string, handling Unicode correctly.
+// func ReverseString(s string) string {
+// 	runes := []rune(s) // Convert to runes for Unicode safety
+// 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+// 		runes[i], runes[j] = runes[j], runes[i] // Swap runes
+// 	}
+// 	return string(runes)
+// }
 
-func TrimReverseUntil(s string, char rune) string {
-	// 1. Reverse the original string
-	reversedS := ReverseString(s)
+// func TrimReverseUntil(s string, char rune) string {
+// 	// 1. Reverse the original string
+// 	reversedS := ReverseString(s)
 
-	// 2. Trim characters from the right (original left) until 'char' is found
-	// We need to find the index of 'char' in the reversed string
-	// and then slice up to that point.
-	// Using strings.IndexRune is efficient.
-	index := strings.IndexRune(reversedS, char)
+// 	// 2. Trim characters from the right (original left) until 'char' is found
+// 	// We need to find the index of 'char' in the reversed string
+// 	// and then slice up to that point.
+// 	// Using strings.IndexRune is efficient.
+// 	index := strings.IndexRune(reversedS, char)
 
-	// If the character is found, take the substring up to that character
-	if index != -1 {
-		reversedS = reversedS[:index] // Keep everything before the char
-	} else {
-		// If char not found, maybe return empty or original reversed (depends on requirement)
-		// Here, we'll return empty as we couldn't find the stop point.
-		return ""
-	}
+// 	// If the character is found, take the substring up to that character
+// 	if index != -1 {
+// 		reversedS = reversedS[:index] // Keep everything before the char
+// 	} else {
+// 		// If char not found, maybe return empty or original reversed (depends on requirement)
+// 		// Here, we'll return empty as we couldn't find the stop point.
+// 		return ""
+// 	}
 
-	// 3. Reverse the result back to original orientation
-	return ReverseString(reversedS)
-}
+// 	// 3. Reverse the result back to original orientation
+// 	return ReverseString(reversedS)
+// }

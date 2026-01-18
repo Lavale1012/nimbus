@@ -172,3 +172,10 @@ localhost-key.pem
 
 # Go module cache
 go.sum.backup
+
+# Documentation files (local only)
+CLAUDE.md
+check_upload_prereqs.md
+roadmap.md
+client/README.Docker.md
+server/README.Docker.md

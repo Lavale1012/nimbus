@@ -49,12 +49,14 @@ Example:
 		}
 		defer RDB.Close()
 		// Validate required flags
+		CurrentBox, err := cache.GetBoxName(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to get current box from cache: %w", err)
+		}
 		if CurrentBox == "" {
-			return fmt.Errorf("CurrentBox is not set")
+			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
-		if destinationFlag == "" {
-			return fmt.Errorf("please provide --destination DESTINATION_PATH")
-		}
+
 		endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
 
 		if filePathFlag == "" {
@@ -124,6 +126,7 @@ Example:
 			finalErr = fmt.Errorf("build request: %w", err)
 			return finalErr
 		}
+		req.ContentLength = int64(body.Len())
 		req.Header.Set("Content-Type", w.FormDataContentType())
 		jwtToken, err := cache.GetAuthToken(RDB)
 		if err != nil {
@@ -164,9 +167,8 @@ Example:
 func init() {
 	rootCmd.AddCommand(filePostCmd)
 	filePostCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
-	filePostCmd.Flags().StringVarP(&destinationFlag, "destination", "dest", "", "Path to file to upload (required)")
+	filePostCmd.Flags().StringVarP(&destinationFlag, "destination", "d", "", "Destination path for the uploaded file")
 
 	filePostCmd.MarkFlagRequired("file")
-	filePostCmd.MarkFlagRequired("destination")
 
 }
