@@ -1,52 +1,32 @@
 # Nimbus CLI
 
-> A command-line interface for secure cloud file storage and management
+> A production-style, cloud-native file storage system built to demonstrate real-world backend engineering: authentication, distributed storage, session management, and secure multi-tenant access — all controlled from a CLI.
 
 [![Development Status](https://img.shields.io/badge/status-under%20development-yellow)](#project-status)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org)
 
 ---
 
-## What is Nimbus?
+## What This Project Demonstrates
 
-Nimbus CLI is a cloud-native file storage system that lets you manage files in the cloud directly from your terminal. It pairs a Go-based CLI client with a REST API server to give you full control over file uploads, downloads, and organization without leaving the command line.
+Nimbus is a full-stack cloud storage system — a Go CLI client paired with a REST API server — that manages files on S3 through a terminal-native workflow. It was built to mirror real SaaS backend architecture and demonstrate end-to-end ownership of both client tooling and server infrastructure.
 
-### Why Nimbus?
+**Core engineering competencies:**
 
-Most cloud storage falls into two camps: consumer apps with slick UIs but no real CLI support (Dropbox, Google Drive), and raw cloud services that are powerful but complex (AWS S3 CLI, Azure CLI). Nimbus sits in between:
-
-- **Terminal-native workflow** -- Manage cloud files with short, familiar commands (`nim post`, `nim get`, `nim cd`, `nim cdir`) instead of long SDK calls or web dashboards.
-- **Hierarchical organization** -- Files are organized into Boxes, Folders, and Files. Boxes act as top-level containers (like drives), folders nest inside them, and you navigate with `cd` and `pwd` just like a local filesystem.
-- **Secure by default** -- JWT authentication, bcrypt password hashing (cost 14), strict password policies, random 8-digit user IDs, and ownership validation on every operation. No file is accessible without proving you own it.
-- **S3-backed storage** -- Files go directly to AWS S3 (or LocalStack for local development), so you get durable, scalable object storage without managing infrastructure.
-- **Scriptable** -- Every operation is a single CLI command, making it straightforward to incorporate into shell scripts, cron jobs, or CI/CD pipelines.
-
----
-
-## How It Works
-
-Nimbus organizes your files in a three-tier hierarchy:
-
-```
-User (ID: 45892034)
-+-- Box: "Home-Box"
-    +-- Folder: "projects"
-    |   +-- Folder: "nimbus-cli"
-    |   |   +-- main.go
-    |   |   +-- README.md
-    |   +-- Folder: "website"
-    |       +-- index.html
-    +-- Folder: "documents"
-        +-- resume.pdf
-```
-
-When you register, Nimbus generates a random 8-digit user ID and creates a default "Home-Box" for you. From there you create folders, navigate paths, and upload/download files -- all through the CLI.
+- **API design & authentication** — JWT-based auth with per-request ownership validation and secure credential handling
+- **Distributed storage** — metadata in PostgreSQL, binary data in S3, kept in sync through transactional handlers
+- **Session management** — client-side Redis cache keeps the API stateless while giving the CLI a persistent working context
+- **Security** — bcrypt (cost 14), constant-time comparisons, non-sequential IDs, Nginx rate limiting, timing attack mitigation
+- **Infrastructure** — Nginx reverse proxy, Dockerized local environment with LocalStack for S3 emulation
+- **CLI UX** — filesystem-like commands (`cd`, `pwd`, `post`, `get`) that abstract cloud operations into familiar patterns
 
 ---
 
 ## Architecture
 
-```
+Nimbus follows a decoupled architecture where each component has a single responsibility. The CLI stays lightweight and delegates all business logic to the API. PostgreSQL owns structured metadata and relationships. S3 handles large binary data. Redis caches session state on the client side so the API remains stateless.
+
+```text
 +------------------+       +------------------+
 |    CLI Client    |<----->|      Redis       |
 |    (Go/Cobra)    |       | (session cache)  |
@@ -69,33 +49,66 @@ When you register, Nimbus generates a random 8-digit user ID and creates a defau
 +------------------+       +------------------+       +------------------+
 ```
 
-**Stack at a glance:**
+| Layer          | Technology          | What it does                                            |
+| -------------- | ------------------- | ------------------------------------------------------- |
+| CLI            | Go + Cobra          | User-facing commands (`nim post`, `nim cd`, etc.)       |
+| Reverse Proxy  | Nginx               | Rate limiting (5-10 req/s), timeouts, request routing   |
+| API Server     | Go + Gin            | REST endpoints, JWT auth, request validation            |
+| Database       | PostgreSQL + GORM   | Users, boxes, folders, file metadata                    |
+| File Storage   | AWS S3 / LocalStack | Durable object storage for uploaded files               |
+| Session Cache  | Redis               | Stores JWT token, current box, and working path locally |
+| Infrastructure | Docker Compose      | Runs PostgreSQL and LocalStack for local development    |
 
-| Layer           | Technology         | What it does                                        |
-|-----------------|--------------------|-----------------------------------------------------|
-| CLI             | Go + Cobra         | User-facing commands (`nim post`, `nim cd`, etc.)   |
-| Reverse Proxy   | Nginx              | Rate limiting (5-10 req/s), timeouts, request routing |
-| API Server      | Go + Gin           | REST endpoints, JWT auth, request validation        |
-| Database        | PostgreSQL + GORM  | Users, boxes, folders, file metadata                |
-| File Storage    | AWS S3 / LocalStack| Durable object storage for uploaded files           |
-| Session Cache   | Redis              | Stores JWT token, current box, and working path locally |
-| Infrastructure  | Docker Compose     | Runs PostgreSQL and LocalStack for local development |
+---
+
+## Security
+
+Security decisions were made to reflect production standards, not just check boxes:
+
+- **Password hashing**: Bcrypt at cost 14. Enforces minimum 8 characters with uppercase, lowercase, number, and special character requirements.
+- **Authentication**: JWT tokens with 24-hour expiration. Every file and folder operation requires a valid token.
+- **Ownership validation**: All operations verify the authenticated user owns the target box before proceeding. No implicit trust between resources.
+- **Timing attack mitigation**: Login compares against a dummy hash for nonexistent users so response time doesn't leak whether an account exists.
+- **Non-sequential IDs**: User IDs are random 8-digit numbers. Box IDs use 63-bit cryptographically secure random generation. Sequential IDs would expose user count and allow enumeration.
+- **Rate limiting**: Nginx limits auth endpoints to 5 req/s and file endpoints to 10 req/s per IP.
+- **Audit logging**: Failed login attempts are logged with IP address. File operations log user ID and duration.
+
+---
+
+## Data Model
+
+Files are organized in a three-tier hierarchy — Boxes contain Folders, Folders contain Files — with full nesting support:
+
+```text
+User (ID: 45892034)
++-- Box: "Home-Box"
+    +-- Folder: "projects"
+    |   +-- Folder: "nimbus-cli"
+    |   |   +-- main.go
+    |   |   +-- README.md
+    |   +-- Folder: "website"
+    |       +-- index.html
+    +-- Folder: "documents"
+        +-- resume.pdf
+```
+
+On registration, the system generates a random 8-digit user ID and creates a default "Home-Box". From there, users create folders, navigate paths, and upload or download files through the CLI.
 
 ---
 
 ## CLI Commands
 
-| Command | Usage | Description |
-|---------|-------|-------------|
-| `nim login` | `nim login` | Authenticate with your Nimbus account (interactive email/password prompt) |
-| `nim logout` | `nim logout` | Clear your local session |
-| `nim cb` | `nim cb Home-Box` | Set the active box for subsequent operations |
-| `nim post` | `nim post -f ./file.txt -d path/to/dest` | Upload a file to the current box (optional destination path) |
-| `nim get` | `nim get -f <s3-key> -o ./output.txt` | Download a file by its S3 key |
-| `nim del` | `nim del -f <s3-key>` | Delete a file |
-| `nim cdir` | `nim cdir my-folder [parent/path]` | Create a new folder in the current box |
-| `nim cd` | `nim cd path/to/folder` | Change working directory within the box (supports `..` and absolute paths) |
-| `nim pwd` | `nim pwd` | Print the current box and working directory |
+| Command      | Usage                                    | Description                                                                |
+| ------------ | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `nim login`  | `nim login`                              | Authenticate with your Nimbus account (interactive email/password prompt)  |
+| `nim logout` | `nim logout`                             | Clear your local session                                                   |
+| `nim cb`     | `nim cb Home-Box`                        | Set the active box for subsequent operations                               |
+| `nim post`   | `nim post -f ./file.txt -d path/to/dest` | Upload a file to the current box (optional destination path)               |
+| `nim get`    | `nim get -f <file> -o ./output.txt`      | Download a file (box and path resolved from session cache)                 |
+| `nim del`    | `nim del -f <file>`                      | Delete a file                                                              |
+| `nim cdir`   | `nim cdir my-folder [parent/path]`       | Create a new folder in the current box                                     |
+| `nim cd`     | `nim cd path/to/folder`                  | Change working directory within the box (supports `..` and absolute paths) |
+| `nim pwd`    | `nim pwd`                                | Print the current box and working directory                                |
 
 ### Example Workflow
 
@@ -136,24 +149,24 @@ Base URL: `http://localhost:8080/v1/api`
 
 ### Authentication
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/users/register` | Register a new user (email, password, 4-digit passkey) |
-| POST | `/auth/users/login` | Log in and receive a JWT token |
+| Method | Endpoint               | Description                                            |
+| ------ | ---------------------- | ------------------------------------------------------ |
+| POST   | `/auth/users/register` | Register a new user (email, password, 4-digit passkey) |
+| POST   | `/auth/users/login`    | Log in and receive a JWT token                         |
 
 ### Files (requires Bearer token)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/files?box_name={name}&filePath={path}` | Upload a file |
-| GET | `/files?box_name={name}&key={s3_key}` | Download a file |
-| DELETE | `/files/{s3_key}` | Delete a file |
+| Method | Endpoint                                 | Description     |
+| ------ | ---------------------------------------- | --------------- |
+| POST   | `/files?box_name={name}&filePath={path}` | Upload a file   |
+| GET    | `/files?box_name={name}&key={s3_key}`    | Download a file |
+| DELETE | `/files/{s3_key}`                        | Delete a file   |
 
 ### Folders (requires Bearer token)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/folders?box_name={name}&path={path}&folder_name={name}` | Create a folder |
+| Method | Endpoint                                                  | Description     |
+| ------ | --------------------------------------------------------- | --------------- |
+| POST   | `/folders?box_name={name}&path={path}&folder_name={name}` | Create a folder |
 
 ---
 
@@ -212,18 +225,6 @@ nim --help
 
 ---
 
-## Security
-
-- **Passwords**: Bcrypt hashing at cost 14. Minimum 8 characters with uppercase, lowercase, number, and special character requirements.
-- **Authentication**: JWT tokens with 24-hour expiration. All file/folder operations require a valid token.
-- **Ownership validation**: Every file and folder operation verifies the authenticated user owns the target box.
-- **Constant-time verification**: Login uses dummy hash comparison for nonexistent users to prevent timing attacks.
-- **Random IDs**: User IDs are random 8-digit numbers (not sequential). Box IDs use 63-bit secure random generation.
-- **Rate limiting**: Nginx rate limits auth endpoints (5 req/s) and file endpoints (10 req/s) per IP.
-- **Logging**: Failed login attempts are logged with IP address. File operations log user ID and duration.
-
----
-
 ## Development
 
 ### Building
@@ -256,9 +257,11 @@ go fmt ./...
 go vet ./...
 ```
 
-### Project Structure
+---
 
-```
+## Project Structure
+
+```text
 nim-cli/
 |-- client/
 |   |-- cli/
