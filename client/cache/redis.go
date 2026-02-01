@@ -39,10 +39,11 @@ func SetAuthToken(rdb *redis.Client, userID uint, email, box, token string) erro
 	ctx := context.Background()
 	key := "user:session"
 	field := map[string]interface{}{
-		"JWT_Token":  token,
-		"Email":      email,
-		"UserID":     userID,
-		"CurrentBox": box,
+		"JWT_Token":   token,
+		"Email":       email,
+		"UserID":      userID,
+		"CurrentBox":  box,
+		"CurrentPath": nil,
 	}
 	err := rdb.HSet(ctx, key, field).Err()
 	if err != nil {
@@ -83,4 +84,30 @@ func GetBoxName(rdb *redis.Client) (string, error) {
 		return "", err
 	}
 	return boxName, nil
+}
+
+func SetCurrentPath(rdb *redis.Client, path string) error {
+	ctx := context.Background()
+	key := "user:session"
+	field := "CurrentPath"
+
+	err := rdb.HSet(ctx, key, field, path).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetCurrentPath(rdb *redis.Client) (string, error) {
+	ctx := context.Background()
+	key := "user:session"
+	field := "CurrentPath"
+
+	path, err := rdb.HGet(ctx, key, field).Result()
+	if err == redis.Nil {
+		return "", errors.New("Path not found")
+	} else if err != nil {
+		return "", err
+	}
+	return path, nil
 }

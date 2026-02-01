@@ -37,6 +37,12 @@ func CreateToken(email, userID string) (string, error) {
 }
 
 func VerifyToken(tokenString string) error {
+	secret, err := utils.GetEnv("JWT_SECRET")
+	if err != nil {
+		return err
+	}
+	secretKey = []byte(secret)
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return secretKey, nil
 	})
@@ -53,6 +59,12 @@ func VerifyToken(tokenString string) error {
 }
 
 func GetEmailFromToken(tokenString string) (string, error) {
+	secret, err := utils.GetEnv("JWT_SECRET")
+	if err != nil {
+		return "", err
+	}
+	secretKey = []byte(secret)
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return secretKey, nil
 	})

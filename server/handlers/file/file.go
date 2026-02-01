@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func Download(d s3db.Config, db *gorm.DB, c *gin.Context) {
+func Download(d s3db.Config, c *gin.Context, db *gorm.DB) {
 	startTime := time.Now()
 
 	user, err := jwt.AuthenticateUser(c, db)

@@ -70,8 +70,8 @@ var loginCmd = &cobra.Command{
 
 		// For demonstration, print the login request
 		MarshaledRequest, _ := json.Marshal(loginRequest)
-		// endpoint := "http://localhost:8080/v1/api/auth/users/login"
-		endpoint := "http://nim.local/v1/api/auth/login"
+
+		endpoint := "http://nim.test/v1/api/auth/login"
 		req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(MarshaledRequest))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)

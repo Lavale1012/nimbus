@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -20,8 +22,22 @@ var deleteFilePathFlag string
 var deleteFileCmd = &cobra.Command{
 	Use:   "del",
 	Short: "Delete a file",
+
 	RunE: func(cmd *cobra.Command, args []string) error {
-		endpoint := "http://localhost:8080/v1/api/files/" + deleteFilePathFlag
+		RDB, err := cache.NewRedisClient()
+		if err != nil {
+			return fmt.Errorf("failed to create Redis client: %w", err)
+		}
+		defer RDB.Close()
+		IsLoggedIn, err := helpers.SessionExists(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to check login status: %w", err)
+		}
+		if !IsLoggedIn {
+			return fmt.Errorf("you are not logged in, please login first")
+		}
+
+		endpoint := "http://nim.test/v1/api/files/" + deleteFilePathFlag
 
 		if deleteFilePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")

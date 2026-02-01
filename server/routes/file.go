@@ -11,7 +11,7 @@ func InitFileRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 	route := r.Group("v1/api")
 	{
 		route.GET("/files", func(c *gin.Context) {
-			file.Download(config, db, c)
+			file.Download(config, c, db)
 		})
 		route.POST("/files", func(c *gin.Context) {
 			file.Upload(config, db, c)

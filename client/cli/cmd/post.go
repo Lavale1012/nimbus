@@ -65,8 +65,7 @@ Example:
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		// endpoint := fmt.Sprintf("http://localhost:8080/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
-		endpoint := fmt.Sprintf("http://nim.local/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
+		endpoint := fmt.Sprintf("http://nim.test/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
 
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
