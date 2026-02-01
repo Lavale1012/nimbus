@@ -47,30 +47,39 @@ When you register, Nimbus generates a random 8-digit user ID and creates a defau
 ## Architecture
 
 ```
-+-------------+         +-------------+         +-------------+
-|             |  HTTP   |             |   SQL   |             |
-|  CLI Client |<------->|  API Server |<------->|  PostgreSQL |
-|   (Cobra)   |         |  (Gin/Go)   |         |  (Metadata) |
-+-------------+         +------+------+         +-------------+
-                               |
-                               | S3 API
-                               v
-                        +-------------+
-                        |   AWS S3    |
-                        | (Files)     |
-                        +-------------+
++------------------+       +------------------+
+|    CLI Client    |<----->|      Redis       |
+|    (Go/Cobra)    |       | (session cache)  |
++--------+---------+       +------------------+
+         |
+    HTTP | requests
+         v
++------------------+
+|      Nginx       |
+|  reverse proxy   |
+|  (rate limiting) |
++--------+---------+
+         |
+         v
++------------------+       +------------------+       +------------------+
+|                  |  SQL  |                  |  S3   |                  |
+|   PostgreSQL     |<----->|   API Server     |<----->|     AWS S3       |
+|   (metadata)     |       |   (Go/Gin)       |       |   (file storage) |
+|                  |       |                  |       |                  |
++------------------+       +------------------+       +------------------+
 ```
 
-| Component | Technology | Role |
-|-----------|-----------|------|
-| CLI | Go + Cobra | Command-line interface |
-| API Server | Go + Gin | REST API backend |
-| Database | PostgreSQL + GORM | File/user metadata |
-| File Storage | AWS S3 / LocalStack | Object storage |
-| Auth | JWT + bcrypt | Authentication and password security |
-| Session Cache | Redis | Stores login tokens and current path locally |
-| Reverse Proxy | Nginx | Rate limiting, timeouts, request routing |
-| Infrastructure | Docker Compose | Local PostgreSQL and LocalStack services |
+**Stack at a glance:**
+
+| Layer           | Technology         | What it does                                        |
+|-----------------|--------------------|-----------------------------------------------------|
+| CLI             | Go + Cobra         | User-facing commands (`nim post`, `nim cd`, etc.)   |
+| Reverse Proxy   | Nginx              | Rate limiting (5-10 req/s), timeouts, request routing |
+| API Server      | Go + Gin           | REST endpoints, JWT auth, request validation        |
+| Database        | PostgreSQL + GORM  | Users, boxes, folders, file metadata                |
+| File Storage    | AWS S3 / LocalStack| Durable object storage for uploaded files           |
+| Session Cache   | Redis              | Stores JWT token, current box, and working path locally |
+| Infrastructure  | Docker Compose     | Runs PostgreSQL and LocalStack for local development |
 
 ---
 
