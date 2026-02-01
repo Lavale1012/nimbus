@@ -1,951 +1,334 @@
-# ☁️ Nimbus CLI
+# Nimbus CLI
 
-> 🚀 A powerful cross-platform command-line interface for secure cloud file storage and management
+> A command-line interface for secure cloud file storage and management
 
-[![Development Status](https://img.shields.io/badge/status-under%20development-yellow)](https://github.com/your-repo/nimbus)
+[![Development Status](https://img.shields.io/badge/status-under%20development-yellow)](#project-status)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-![Nimbus CLI Hero Image](docs/images/hero-banner.png)
-*A modern CLI tool for developers who love the command line*
 
 ---
 
-## 📋 Table of Contents
+## What is Nimbus?
 
-- [What is Nimbus?](#-what-is-nimbus)
-- [Key Features](#-key-features)
-- [How It Works](#-how-it-works)
-- [Architecture](#-architecture)
-- [Quick Start](#-quick-start)
-- [Usage Examples](#-usage-examples)
-- [API Reference](#-api-reference)
-- [Development](#-development)
-- [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
+Nimbus CLI is a cloud-native file storage system that lets you manage files in the cloud directly from your terminal. It pairs a Go-based CLI client with a REST API server to give you full control over file uploads, downloads, and organization without leaving the command line.
 
----
+### Why Nimbus?
 
-## 🌟 What is Nimbus?
+Most cloud storage falls into two camps: consumer apps with slick UIs but no real CLI support (Dropbox, Google Drive), and raw cloud services that are powerful but complex (AWS S3 CLI, Azure CLI). Nimbus sits in between:
 
-**Nimbus CLI** is a cloud-native file storage system that brings the power and simplicity of the command line to cloud file management. Think of it as a combination of Dropbox's ease-of-use with the developer-friendly interface of Git.
-
-### The Problem
-
-Modern cloud storage solutions often fall into two camps:
-- **Consumer-focused** (Dropbox, Google Drive) - Great UIs but poor CLI/API support
-- **Developer-focused** (AWS S3, Azure Blob) - Powerful but complex and unintuitive
-
-### The Solution
-
-Nimbus provides:
-- 🎯 **Intuitive CLI** - Simple, memorable commands that just work
-- 🏗️ **Hierarchical Organization** - Organize files with Boxes → Folders → Files
-- ⚡ **Direct S3 Storage** - Fast uploads/downloads without proxy servers
-- 🔐 **Secure by Default** - JWT authentication with random 8-digit user IDs
-- 🚀 **Developer-First** - Built for automation, scripting, and CI/CD pipelines
-
-![Nimbus Architecture Diagram](docs/images/architecture-diagram.png)
+- **Terminal-native workflow** -- Manage cloud files with short, familiar commands (`nim post`, `nim get`, `nim cd`, `nim cdir`) instead of long SDK calls or web dashboards.
+- **Hierarchical organization** -- Files are organized into Boxes, Folders, and Files. Boxes act as top-level containers (like drives), folders nest inside them, and you navigate with `cd` and `pwd` just like a local filesystem.
+- **Secure by default** -- JWT authentication, bcrypt password hashing (cost 14), strict password policies, random 8-digit user IDs, and ownership validation on every operation. No file is accessible without proving you own it.
+- **S3-backed storage** -- Files go directly to AWS S3 (or LocalStack for local development), so you get durable, scalable object storage without managing infrastructure.
+- **Scriptable** -- Every operation is a single CLI command, making it straightforward to incorporate into shell scripts, cron jobs, or CI/CD pipelines.
 
 ---
 
-## ✨ Key Features
-
-### Current Features (v0.1.0 - MVP)
-
-✅ **User Management**
-- Secure user registration with password validation
-- JWT-based authentication
-- Random 8-digit user IDs for enhanced privacy
-- Automatic home box creation on signup
-
-✅ **File Operations**
-- Direct file upload to S3 storage
-- File download from S3 via unique keys
-- File deletion with metadata cleanup
-- Comprehensive input validation
-
-✅ **Data Organization**
-- Hierarchical box-based structure
-- User-specific bucket prefixes
-- PostgreSQL metadata storage
-- S3-backed file storage
-
-✅ **Security**
-- Bcrypt password hashing (cost: 14)
-- 4-digit passkey support
-- User/box ownership validation
-- Secure random ID generation
-
-### Coming Soon
-
-🔜 **Enhanced File Management**
-- Folder support within boxes
-- File versioning
-- Batch operations
-- File search and filtering
-
-🔜 **Collaboration**
-- Box sharing
-- Access control lists
-- Shared folders
-- Activity logging
-
-🔜 **Advanced Features**
-- Pre-signed S3 URLs for direct uploads
-- File encryption
-- Duplicate detection
-- Automated backups
-
----
-
-## 🎯 How It Works
-
-### The Nimbus Hierarchy
+## How It Works
 
 Nimbus organizes your files in a three-tier hierarchy:
 
 ```
 User (ID: 45892034)
-└── 📦 Box: "work"
-    ├── 📁 Folder: "projects"
-    │   ├── 📁 Folder: "nimbus-cli"
-    │   │   ├── 📄 File: "README.md"
-    │   │   └── 📄 File: "main.go"
-    │   └── 📁 Folder: "website"
-    │       └── 📄 File: "index.html"
-    └── 📁 Folder: "documents"
-        └── 📄 File: "resume.pdf"
++-- Box: "Home-Box"
+    +-- Folder: "projects"
+    |   +-- Folder: "nimbus-cli"
+    |   |   +-- main.go
+    |   |   +-- README.md
+    |   +-- Folder: "website"
+    |       +-- index.html
+    +-- Folder: "documents"
+        +-- resume.pdf
 ```
 
-![Hierarchy Visualization](docs/images/hierarchy-structure.png)
+When you register, Nimbus generates a random 8-digit user ID and creates a default "Home-Box" for you. From there you create folders, navigate paths, and upload/download files -- all through the CLI.
 
-### User Flow Example
+---
 
-#### 1. **Registration**
-```bash
-# User registers with email and password
-curl -X POST http://localhost:8080/v1/api/auth/users/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "developer@example.com",
-    "password": "SecurePass123!",
-    "passkey": "1234"
-  }'
+## Architecture
 
-# Response
-{
-  "message": "User registered successfully",
-  "email": "developer@example.com",
-  "user_id": 45892034  # Random 8-digit ID
-}
+```
++-------------+         +-------------+         +-------------+
+|             |  HTTP   |             |   SQL   |             |
+|  CLI Client |<------->|  API Server |<------->|  PostgreSQL |
+|   (Cobra)   |         |  (Gin/Go)   |         |  (Metadata) |
++-------------+         +------+------+         +-------------+
+                               |
+                               | S3 API
+                               v
+                        +-------------+
+                        |   AWS S3    |
+                        | (Files)     |
+                        +-------------+
 ```
 
-The system automatically:
-- Generates a secure 8-digit user ID (e.g., 45892034)
-- Creates a "Home-Box" for the user
-- Sets up a unique S3 bucket prefix: `users/nim-user-45892034/boxes/Home-Box/`
+| Component | Technology | Role |
+|-----------|-----------|------|
+| CLI | Go + Cobra | Command-line interface |
+| API Server | Go + Gin | REST API backend |
+| Database | PostgreSQL + GORM | File/user metadata |
+| File Storage | AWS S3 / LocalStack | Object storage |
+| Auth | JWT + bcrypt | Authentication and password security |
+| Session Cache | Redis | Stores login tokens and current path locally |
+| Reverse Proxy | Nginx | Rate limiting, timeouts, request routing |
+| Infrastructure | Docker Compose | Local PostgreSQL and LocalStack services |
 
-#### 2. **Authentication**
+---
+
+## CLI Commands
+
+| Command | Usage | Description |
+|---------|-------|-------------|
+| `nim login` | `nim login` | Authenticate with your Nimbus account (interactive email/password prompt) |
+| `nim logout` | `nim logout` | Clear your local session |
+| `nim cb` | `nim cb Home-Box` | Set the active box for subsequent operations |
+| `nim post` | `nim post -f ./file.txt -d path/to/dest` | Upload a file to the current box (optional destination path) |
+| `nim get` | `nim get -f <s3-key> -o ./output.txt` | Download a file by its S3 key |
+| `nim del` | `nim del -f <s3-key>` | Delete a file |
+| `nim cdir` | `nim cdir my-folder [parent/path]` | Create a new folder in the current box |
+| `nim cd` | `nim cd path/to/folder` | Change working directory within the box (supports `..` and absolute paths) |
+| `nim pwd` | `nim pwd` | Print the current box and working directory |
+
+### Example Workflow
+
 ```bash
-# User logs in
-curl -X POST http://localhost:8080/v1/api/auth/users/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "developer@example.com",
-    "password": "SecurePass123!"
-  }'
+# Log in
+nim login
 
-# Response
-{
-  "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
+# Set your active box
+nim cb Home-Box
 
-#### 3. **File Upload**
-```bash
-# Upload a file using CLI
-nim post -f document.pdf --user 45892034 --box 3778528091639790813
+# Create a folder structure
+nim cdir projects
+nim cd projects
+nim cdir reports
 
-# Behind the scenes:
-# 1. CLI sends file to API server
-# 2. Server validates user and box ownership
-# 3. File is uploaded to S3: users/nim-user-45892034/boxes/Home-Box/document.pdf_1698765432
-# 4. Metadata is stored in PostgreSQL
-# 5. User receives confirmation
-```
+# Upload a file into the current path
+nim post -f quarterly-report.pdf -d reports
 
-![Upload Flow Diagram](docs/images/upload-flow.png)
+# Check where you are
+nim pwd
+# Output: Home-Box/projects
 
-#### 4. **File Download**
-```bash
-# Download file using S3 key
-nim get -f users/nim-user-45892034/boxes/Home-Box/document.pdf_1698765432 \
-        -o ./downloaded-document.pdf
+# Download a file
+nim get -f users/nim-user-12345678/boxes/Home-Box/projects/reports/quarterly-report.pdf_1698765432 \
+       -o ./local-copy.pdf
+
+# Delete a file
+nim del -f users/nim-user-12345678/boxes/Home-Box/projects/reports/quarterly-report.pdf_1698765432
+
+# Log out
+nim logout
 ```
 
 ---
 
-## 🏗️ Architecture
+## API Endpoints
 
-### System Components
+Base URL: `http://localhost:8080/v1/api`
 
-```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│             │  HTTPS  │             │   SQL   │             │
-│  CLI Client │◄───────►│  API Server │◄───────►│  PostgreSQL │
-│   (Cobra)   │         │  (Gin/Go)   │         │  (Metadata) │
-└─────────────┘         └─────────────┘         └─────────────┘
-                               │
-                               │ S3 API
-                               ▼
-                        ┌─────────────┐
-                        │             │
-                        │   AWS S3    │
-                        │   (Files)   │
-                        └─────────────┘
-```
+### Authentication
 
-### Technology Stack
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/users/register` | Register a new user (email, password, 4-digit passkey) |
+| POST | `/auth/users/login` | Log in and receive a JWT token |
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **CLI** | Go + Cobra | Command-line interface |
-| **API Server** | Go + Gin | REST API backend |
-| **Database** | PostgreSQL + GORM | Metadata storage |
-| **File Storage** | AWS S3 | Object storage |
-| **Authentication** | JWT | Stateless auth tokens |
-| **Testing** | Go testing + testify | Unit/integration tests |
+### Files (requires Bearer token)
 
-### Database Schema
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/files?box_name={name}&filePath={path}` | Upload a file |
+| GET | `/files?box_name={name}&key={s3_key}` | Download a file |
+| DELETE | `/files/{s3_key}` | Delete a file |
 
-```sql
--- Users with random 8-digit IDs
-CREATE TABLE user_models (
-    id BIGINT PRIMARY KEY,  -- Random 8-digit ID (no auto-increment)
-    email VARCHAR(254) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    bucket_prefix VARCHAR(255) UNIQUE,
-    pass_key VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    deleted_at TIMESTAMP
-);
+### Folders (requires Bearer token)
 
--- Boxes (top-level containers)
-CREATE TABLE box_models (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES user_models(id),
-    box_id BIGINT NOT NULL,  -- Random secure ID
-    name VARCHAR(255) NOT NULL,
-    size BIGINT DEFAULT 0,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-
--- Files (stored in S3)
-CREATE TABLE file_models (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES user_models(id),
-    box_id BIGINT REFERENCES box_models(id),
-    name VARCHAR(255) NOT NULL,
-    size BIGINT DEFAULT 0,
-    s3_key VARCHAR(512) UNIQUE NOT NULL,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-```
-
-![Database Schema Diagram](docs/images/database-schema.png)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/folders?box_name={name}&path={path}&folder_name={name}` | Create a folder |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- 🔧 **Go 1.21+** - [Download](https://golang.org/dl/)
-- 🐳 **Docker & Docker Compose** - [Download](https://www.docker.com/products/docker-desktop)
-- 📝 **Git** - [Download](https://git-scm.com/downloads)
-- ☁️ **AWS Account** (optional for local dev) - [Sign up](https://aws.amazon.com/)
+- Go 1.21+
+- Docker and Docker Compose
+- Redis (running locally on port 6379)
 
-### Installation
+### 1. Clone and start services
 
-#### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/nimbus.git
-cd nimbus
-```
+git clone <repo-url>
+cd nim-cli
 
-#### 2. Start Local Services
-```bash
-# Starts PostgreSQL and LocalStack (S3 emulator)
+# Start PostgreSQL and LocalStack (S3 emulator)
 docker compose up -d
-
-# Verify services are running
-docker compose ps
 ```
 
-#### 3. Configure Environment
-The repository includes a `.env` file. Update if needed:
+### 2. Configure environment
+
+Create a `.env` file in the server directory (or use the existing one):
+
 ```env
 PORT=8080
-DATABASE_URL=postgresql://user:pass@localhost:5432/nimbus
+LOCAL_DEV=true
+DATABASE_URL=postgresql://nimbus:nimbus@localhost:5432/nimbus
 AWS_REGION=us-east-1
 S3_BUCKET=nimbus-storage
-S3_ENDPOINT=http://localhost:4566  # LocalStack
+S3_ENDPOINT=http://localhost:4566
+S3_FORCE_PATH_STYLE=true
+JWT_SECRET=your-secret-key
 ```
 
-#### 4. Build the CLI
+### 3. Start the API server
+
+```bash
+cd server
+go run main.go
+```
+
+### 4. Build and use the CLI
+
 ```bash
 cd client
 go build -o nim cli/main.go
 
-# Optionally, move to your PATH
+# Optionally add to your PATH
 sudo mv nim /usr/local/bin/
-```
 
-#### 5. Start the API Server
-```bash
-cd server
-go run main.go
-
-# Server starts on http://localhost:8080
+# Verify it works
+nim --help
 ```
 
 ---
 
-## 📖 Usage Examples
+## Security
 
-### User Management
-
-#### Register a New User
-```bash
-curl -X POST http://localhost:8080/v1/api/auth/users/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "alice@example.com",
-    "password": "MySecure123!",
-    "passkey": "1234"
-  }'
-
-# Response
-{
-  "message": "User registered successfully",
-  "email": "alice@example.com",
-  "user_id": 23847561
-}
-```
-
-#### Login
-```bash
-curl -X POST http://localhost:8080/v1/api/auth/users/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "alice@example.com",
-    "password": "MySecure123!"
-  }'
-
-# Response
-{
-  "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### File Operations
-
-#### Upload a File
-```bash
-# Using the CLI
-nim post -f presentation.pptx \
-         --user 23847561 \
-         --box 8374920174839201
-
-# Using curl
-curl -X POST "http://localhost:8080/v1/api/files?user_id=23847561&box_id=8374920174839201" \
-  -F "file=@presentation.pptx"
-
-# Response
-{
-  "message": "file uploaded successfully",
-  "file_id": 42,
-  "name": "presentation.pptx",
-  "size": 2048000,
-  "s3_key": "users/nim-user-23847561/boxes/Home-Box/presentation.pptx_1698765432"
-}
-```
-
-#### Download a File
-```bash
-# Using the CLI
-nim get -f users/nim-user-23847561/boxes/Home-Box/presentation.pptx_1698765432 \
-        -o ./downloaded-presentation.pptx
-
-# Using curl
-curl "http://localhost:8080/v1/api/files?key=users/nim-user-23847561/boxes/Home-Box/presentation.pptx_1698765432" \
-  --output presentation.pptx
-```
-
-#### Delete a File
-```bash
-curl -X DELETE "http://localhost:8080/v1/api/files/users/nim-user-23847561/boxes/Home-Box/presentation.pptx_1698765432"
-
-# Response
-{
-  "message": "file deleted"
-}
-```
-
-### Real-World Scenarios
-
-#### Scenario 1: Backing Up Project Files
-```bash
-#!/bin/bash
-# backup-project.sh
-
-USER_ID=23847561
-BOX_ID=8374920174839201
-
-# Upload all Go files
-for file in *.go; do
-  echo "Uploading $file..."
-  nim post -f "$file" --user $USER_ID --box $BOX_ID
-done
-
-echo "Backup complete!"
-```
-
-#### Scenario 2: Automated Report Generation
-```bash
-#!/bin/bash
-# generate-and-upload-report.sh
-
-# Generate report
-python generate_report.py > report_$(date +%Y%m%d).pdf
-
-# Upload to Nimbus
-nim post -f report_$(date +%Y%m%d).pdf \
-         --user $NIMBUS_USER_ID \
-         --box $REPORTS_BOX_ID
-
-echo "Report generated and uploaded!"
-```
-
-![Usage Examples](docs/images/usage-examples.png)
+- **Passwords**: Bcrypt hashing at cost 14. Minimum 8 characters with uppercase, lowercase, number, and special character requirements.
+- **Authentication**: JWT tokens with 24-hour expiration. All file/folder operations require a valid token.
+- **Ownership validation**: Every file and folder operation verifies the authenticated user owns the target box.
+- **Constant-time verification**: Login uses dummy hash comparison for nonexistent users to prevent timing attacks.
+- **Random IDs**: User IDs are random 8-digit numbers (not sequential). Box IDs use 63-bit secure random generation.
+- **Rate limiting**: Nginx rate limits auth endpoints (5 req/s) and file endpoints (10 req/s) per IP.
+- **Logging**: Failed login attempts are logged with IP address. File operations log user ID and duration.
 
 ---
 
-## 🔌 API Reference
+## Development
 
-### Base URL
-```
-http://localhost:8080/v1/api
-```
+### Building
 
-### Authentication Endpoints
+```bash
+# Build CLI
+cd client && go build -o nim cli/main.go
 
-#### POST `/auth/users/register`
-Register a new user.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!",
-  "passkey": "1234"
-}
+# Build API server
+cd server && go build -o api-server main.go
 ```
 
-**Validation Rules:**
-- Email: Valid email format, max 254 characters
-- Password: Min 8 characters, must include uppercase, lowercase, number, and special character
-- Passkey: Exactly 4 characters
+### Testing
 
-**Response (201):**
-```json
-{
-  "message": "User registered successfully",
-  "email": "user@example.com",
-  "user_id": 45892034
-}
+```bash
+# Run all server tests
+cd server && go test ./...
+
+# Run with coverage
+cd server && go test -cover ./...
+
+# Run specific test file
+cd server && go test -v ./tests/
 ```
 
-#### POST `/auth/users/login`
-Authenticate a user.
+### Code quality
 
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
+```bash
+go fmt ./...
+go vet ./...
 ```
-
-**Response (200):**
-```json
-{
-  "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### File Management Endpoints
-
-#### POST `/files?user_id={id}&box_id={id}`
-Upload a file.
-
-**Query Parameters:**
-- `user_id` (required): User's 8-digit ID
-- `box_id` (required): Target box ID
-
-**Request Body:**
-- Multipart form data with `file` field
-
-**Response (200):**
-```json
-{
-  "message": "file uploaded successfully",
-  "file_id": 42,
-  "name": "document.pdf",
-  "size": 1024000,
-  "s3_key": "users/nim-user-45892034/boxes/Home-Box/document.pdf_1698765432"
-}
-```
-
-**Error Responses:**
-- `400`: Missing/invalid parameters, user not found, box not found
-- `500`: S3 upload failure, database error
-
-#### GET `/files?key={s3_key}`
-Download a file.
-
-**Query Parameters:**
-- `key` (required): S3 key of the file
-
-**Response (200):**
-- File stream with appropriate Content-Type header
-- Content-Disposition header for download
-
-**Error Responses:**
-- `400`: Missing key parameter
-- `404`: File not found
-- `500`: S3 download failure
-
-#### DELETE `/files/{filename}`
-Delete a file.
-
-**Path Parameters:**
-- `filename` (required): Name of the file to delete
-
-**Response (200):**
-```json
-{
-  "message": "file deleted"
-}
-```
-
-**Error Responses:**
-- `404`: File not found
-- `500`: Deletion failure
-
----
-
-## 🛠️ Development
 
 ### Project Structure
 
 ```
 nim-cli/
-├── client/                      # CLI application
-│   ├── cli/
-│   │   ├── main.go             # Entry point
-│   │   ├── cmd/                # Cobra commands
-│   │   │   ├── root.go         # Root command
-│   │   │   ├── post.go         # Upload command
-│   │   │   ├── get.go          # Download command
-│   │   │   └── delete.go       # Delete command
-│   │   └── animations/         # Loading animations
-│   ├── utils/                  # Utilities
-│   │   ├── getEnv.go          # Environment helpers
-│   │   └── searchRoot.go      # File search
-│   └── go.mod
-│
-├── server/                      # API server
-│   ├── main.go                 # Entry point
-│   ├── server-init/
-│   │   └── InitServer.go      # Server setup
-│   ├── handlers/
-│   │   ├── userHandlers/      # User auth handlers
-│   │   │   └── UserAuth.go
-│   │   └── fileHandlers/      # File operation handlers
-│   │       └── FileOperations.go
-│   ├── routes/
-│   │   ├── initUserRoutes.go  # User routes
-│   │   └── initFileRoutes.go  # File routes
-│   ├── models/
-│   │   ├── UserModel.go       # User schema
-│   │   ├── BoxModel.go        # Box schema
-│   │   ├── FolderModel.go     # Folder schema
-│   │   └── Files.go           # File schema
-│   ├── middleware/
-│   │   └── auth/
-│   │       └── JWT/           # JWT middleware
-│   ├── db/
-│   │   ├── Postgres/          # PostgreSQL config
-│   │   │   └── config/
-│   │   │       └── ConnectPostgres.go
-│   │   └── S3/                # S3 operations
-│   │       ├── config/
-│   │       │   └── S3Connect.go
-│   │       └── operations/
-│   │           ├── PutObj.go
-│   │           ├── GetObj.go
-│   │           └── MakeButcket.go
-│   ├── utils/
-│   │   ├── hash.go            # Password hashing
-│   │   └── getEnv.go          # Environment helpers
-│   ├── tests/                 # Test files
-│   │   ├── file_operations_test.go
-│   │   ├── userauth_test.go
-│   │   └── hash_utils_test.go
-│   ├── migrations/            # Database migrations
-│   └── go.mod
-│
-├── docker-compose.yml         # Local services
-├── .env                       # Environment config
-├── .gitignore
-├── LICENSE
-├── README.md
-└── CLAUDE.md                  # AI assistant context
-```
-
-### Building from Source
-
-```bash
-# Build CLI
-cd client
-go build -o nim cli/main.go
-
-# Build API server
-cd server
-go build -o api-server main.go
-
-# Build both with custom output
-make build  # If Makefile exists
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run tests for specific package
-cd server && go test ./handlers/fileHandlers/...
-
-# Run verbose tests
-go test -v ./...
-
-# Run specific test
-go test -run TestUploadFile_MissingUserID ./tests/
-```
-
-### Code Quality
-
-```bash
-# Format code
-go fmt ./...
-
-# Vet code
-go vet ./...
-
-# Run linter (requires golangci-lint)
-golangci-lint run
-
-# Check for security issues
-gosec ./...
-```
-
-### Local Development Workflow
-
-1. **Start local services**
-   ```bash
-   docker compose up -d
-   ```
-
-2. **Run migrations** (if needed)
-   ```bash
-   cd server/migrations
-   go run 001_*.go
-   ```
-
-3. **Start server in watch mode**
-   ```bash
-   cd server
-   air  # or go run main.go
-   ```
-
-4. **Run CLI in development**
-   ```bash
-   cd client
-   go run cli/main.go --help
-   ```
-
-5. **Test your changes**
-   ```bash
-   go test ./...
-   ```
-
----
-
-## 🗺️ Roadmap
-
-### ✅ Phase 1: MVP (Current)
-- [x] User registration and authentication
-- [x] Random 8-digit user IDs
-- [x] Basic file upload/download/delete
-- [x] S3 integration
-- [x] PostgreSQL metadata storage
-- [x] CLI commands (post, get, delete)
-- [x] Comprehensive test suite
-
-### 🚧 Phase 2: Core Features (In Progress)
-- [ ] Folder support within boxes
-- [ ] File listing and browsing
-- [ ] Box creation and management
-- [ ] Path-based file operations (`box:/folder/file`)
-- [ ] File metadata (MIME types, checksums)
-- [ ] Error handling improvements
-
-### 🔜 Phase 3: Enhanced Experience
-- [ ] Pre-signed URLs for direct S3 uploads
-- [ ] Progress indicators for large files
-- [ ] Concurrent uploads/downloads
-- [ ] File versioning
-- [ ] Duplicate detection
-- [ ] Search functionality
-
-### 📅 Phase 4: Collaboration
-- [ ] Box sharing (read/write permissions)
-- [ ] Shared folders
-- [ ] Access control lists
-- [ ] Activity logs
-- [ ] User groups
-
-### 🎯 Phase 5: Enterprise Features
-- [ ] File encryption
-- [ ] Audit logging
-- [ ] Admin dashboard
-- [ ] Usage quotas
-- [ ] Backup/restore
-- [ ] Multi-region support
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how you can help:
-
-### Getting Started
-
-1. **Fork the repository**
-2. **Clone your fork**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/nimbus.git
-   ```
-3. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-4. **Make your changes**
-5. **Run tests**
-   ```bash
-   go test ./...
-   ```
-6. **Commit your changes**
-   ```bash
-   git commit -m "feat: Add amazing feature"
-   ```
-7. **Push to your fork**
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-8. **Open a Pull Request**
-
-### Development Guidelines
-
-- ✅ Follow [Go best practices](https://golang.org/doc/effective_go)
-- ✅ Write tests for new functionality (aim for >80% coverage)
-- ✅ Update documentation for API changes
-- ✅ Use [conventional commits](https://www.conventionalcommits.org/)
-- ✅ Ensure all tests pass before submitting PR
-- ✅ Keep PRs focused and atomic
-
-### Commit Message Format
-
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `test`: Test additions/changes
-- `refactor`: Code refactoring
-- `chore`: Build/tooling changes
-
-**Example:**
-```
-feat(upload): Add progress indicator for large files
-
-Implement real-time progress tracking during file uploads
-using chunked transfer encoding and progress callbacks.
-
-Closes #123
+|-- client/
+|   |-- cli/
+|   |   |-- main.go              # CLI entry point
+|   |   |-- cmd/                  # Cobra command definitions
+|   |   |   |-- root.go
+|   |   |   |-- login.go
+|   |   |   |-- logout.go
+|   |   |   |-- post.go          # File upload
+|   |   |   |-- get.go           # File download
+|   |   |   |-- delete.go        # File deletion
+|   |   |   |-- box.go           # Set current box
+|   |   |   |-- folder.go        # Create folder
+|   |   |   +-- path.go          # cd, pwd, ls commands
+|   |   |-- animations/          # Loading spinners and progress bars
+|   |   |-- types/               # Shared type definitions
+|   |   +-- banner/              # Login banner display
+|   |-- cache/
+|   |   +-- redis.go             # Redis session management
+|   +-- utils/
+|       +-- helpers/             # Login status checks
+|
+|-- server/
+|   |-- main.go                  # Server entry point
+|   |-- server-init/
+|   |   +-- server.go            # Gin setup, route registration, S3/DB init
+|   |-- handlers/
+|   |   |-- user/auth.go         # Registration and login logic
+|   |   |-- file/file.go         # Upload, download, delete handlers
+|   |   |-- folder/folder.go     # Folder creation handler
+|   |   +-- box/box.go           # Box handlers (stubs)
+|   |-- routes/                  # Route group definitions
+|   |-- models/                  # GORM models (User, Box, Folder, File)
+|   |-- middleware/jwt/          # JWT creation, verification, auth middleware
+|   |-- db/
+|   |   |-- s3/                  # S3 client connection
+|   |   +-- postgres/            # PostgreSQL connection and auto-migration
+|   |-- utils/                   # Hashing, ID generation, helper functions
+|   |-- tests/                   # Unit and integration tests
+|   +-- infra/nginx/             # Nginx reverse proxy config
+|
+|-- docker-compose.yml           # PostgreSQL + LocalStack
++-- CLAUDE.md
 ```
 
 ---
 
-## 🔒 Security
+## Project Status
 
-### Current Security Features
+Nimbus is under active development.
 
-- 🔐 **Password Security**
-  - Bcrypt hashing with cost factor 14
-  - Minimum 8 characters
-  - Complexity requirements (uppercase, lowercase, number, special char)
+### Implemented
 
-- 🎲 **Random ID Generation**
-  - Cryptographically secure random 8-digit user IDs
-  - Collision detection and retry logic
-  - Large random box IDs (63-bit)
+- User registration and login with JWT authentication
+- File upload, download, and delete via S3
+- Folder creation with nested path support
+- Path navigation (`cd`, `pwd`) within boxes
+- Redis-based session caching on the client
+- Nginx reverse proxy with rate limiting
+- CLI commands: `login`, `logout`, `post`, `get`, `del`, `cb`, `cdir`, `cd`, `pwd`
 
-- 🛡️ **Access Control**
-  - JWT-based authentication
-  - User/box ownership validation
-  - Input validation and sanitization
+### Partially implemented
 
-- 📝 **Data Protection**
-  - SQL injection prevention (GORM parameterized queries)
-  - XSS protection
-  - CORS configuration
-  - Rate limiting (planned)
+- Folder operations (create works; list, move, rename, delete are stubbed)
+- Box management (routes defined; handlers not yet built)
 
-### Reporting Security Issues
+### Planned
 
-If you discover a security vulnerability, please email security@example.com instead of using the issue tracker.
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-```
-MIT License
-
-Copyright (c) 2024 Nimbus CLI Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software...
-```
+- `ls` command for listing directory contents
+- File move and rename
+- Box creation and deletion via CLI
+- Pre-signed S3 URLs for direct uploads
+- File versioning and duplicate detection
+- Collaboration and sharing features
+- File encryption
 
 ---
 
-## 💬 Support & Community
+## License
 
-### Documentation
-- 📖 [Full Documentation](docs/)
-- 🎓 [Getting Started Guide](docs/getting-started.md)
-- 📚 [API Reference](docs/api-reference.md)
-- 🔧 [Developer Guide](docs/developer-guide.md)
-
-### Getting Help
-- 🐛 [Report a Bug](https://github.com/your-repo/nimbus/issues/new?template=bug_report.md)
-- ✨ [Request a Feature](https://github.com/your-repo/nimbus/issues/new?template=feature_request.md)
-- 💭 [GitHub Discussions](https://github.com/your-repo/nimbus/discussions)
-- 💬 [Discord Community](https://discord.gg/nimbus) *(Coming Soon)*
-
-### Stay Updated
-- ⭐ Star this repository
-- 👀 Watch for updates
-- 🐦 Follow us on Twitter [@NimbusCLI](https://twitter.com/nimbuscli) *(Coming Soon)*
-
----
-
-## 📊 Project Status
-
-> **⚠️ UNDER ACTIVE DEVELOPMENT**
->
-> Nimbus is currently in the **MVP phase** and is not yet ready for production use. We're actively working on:
-> - Completing core file management features
-> - Improving error handling and edge cases
-> - Adding comprehensive documentation
-> - Expanding test coverage
-> - Hardening security features
->
-> **Expected Beta Release:** Q2 2024
->
-> Star ⭐ the repo and watch 👀 for updates!
-
-### Current Version: v0.1.0-alpha
-
-#### What Works
-✅ User registration and login
-✅ File upload/download/delete
-✅ Basic CLI commands
-✅ Local development with Docker
-✅ S3 integration
-
-#### Known Limitations
-⚠️ No folder support yet
-⚠️ Limited error messages
-⚠️ No file listing
-⚠️ Single box per user (Home-Box only)
-⚠️ No file versioning
-
-#### Performance Metrics
-- File upload: ~5MB/s (local), ~2MB/s (S3)
-- Database query latency: <50ms
-- API response time: <200ms
-
-![Project Metrics](docs/images/project-metrics.png)
-
----
-
-## 🙏 Acknowledgments
-
-Special thanks to:
-- The Go community for excellent libraries
-- AWS for S3 storage
-- Contributors and early adopters
-- Everyone who provided feedback
-
----
-
-<div align="center">
-
-### 🚀 Built for developers who love the command line
-
-**[⭐ Star on GitHub](https://github.com/your-repo/nimbus)** • **[📖 Read the Docs](docs/)** • **[🐛 Report Bug](issues/)** • **[💡 Request Feature](issues/)**
-
----
-
-![Footer Banner](docs/images/footer-banner.png)
-
-**Made with ❤️ by the Nimbus team**
-
-</div>
+MIT
