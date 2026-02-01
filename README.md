@@ -118,12 +118,11 @@ nim post -f quarterly-report.pdf -d reports
 nim pwd
 # Output: Home-Box/projects
 
-# Download a file
-nim get -f users/nim-user-12345678/boxes/Home-Box/projects/reports/quarterly-report.pdf_1698765432 \
-       -o ./local-copy.pdf
+# Download a file (box and path resolved from session cache)
+nim get -f quarterly-report.pdf -o ./local-copy.pdf
 
 # Delete a file
-nim del -f users/nim-user-12345678/boxes/Home-Box/projects/reports/quarterly-report.pdf_1698765432
+nim del -f quarterly-report.pdf
 
 # Log out
 nim logout
