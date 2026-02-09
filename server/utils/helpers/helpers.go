@@ -62,6 +62,56 @@ func AssociateFileWithFolder(db *gorm.DB, c *gin.Context, fileModel *models.File
 	}
 }
 
+// GetBoxID returns the box ID for a given box name and user
+func GetBoxID(db *gorm.DB, boxName string, userID uint) uint {
+	var box models.Box
+	if err := db.Where("name = ? AND user_id = ?", boxName, userID).First(&box).Error; err != nil {
+		return 0
+	}
+	return box.ID
+}
+
+// GetParentFolderID resolves a path to a folder ID
+// Returns nil if path is empty (root level), or the folder ID if path exists
+func GetParentFolderID(db *gorm.DB, userID uint, boxName string, path string) *uint {
+	if path == "" || path == "/" {
+		return nil
+	}
+
+	// Get box ID first
+	boxID := GetBoxID(db, boxName, userID)
+	if boxID == 0 {
+		return nil
+	}
+
+	// Clean and split the path
+	path = strings.Trim(path, "/")
+	segments := strings.Split(path, "/")
+
+	// Traverse the folder hierarchy
+	var currentParentID *uint = nil
+
+	for _, segment := range segments {
+		var folder models.Folder
+		query := db.Where("name = ? AND user_id = ? AND box_id = ?", segment, userID, boxID)
+
+		if currentParentID == nil {
+			query = query.Where("parent_id IS NULL")
+		} else {
+			query = query.Where("parent_id = ?", *currentParentID)
+		}
+
+		if err := query.First(&folder).Error; err != nil {
+			// Folder not found in path
+			return nil
+		}
+
+		currentParentID = &folder.ID
+	}
+
+	return currentParentID
+}
+
 // // reverseString reverses a string, handling Unicode correctly.
 // func ReverseString(s string) string {
 // 	runes := []rune(s) // Convert to runes for Unicode safety
