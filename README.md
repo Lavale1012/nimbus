@@ -36,12 +36,12 @@ Nimbus follows a decoupled architecture where each component has a single respon
          v
 +------------------+
 |      Nginx       |
-|  reverse proxy   |
-|  (rate limiting) |
-+--------+---------+
-         |
-         v
-+------------------+       +------------------+       +------------------+
+|  reverse proxy   |  <-------------+
+|  (rate limiting) |                |
++--------+---------+                |  Forwarded HTTP requests
+                                    |
+                                    v
++------------------+       +-----------------+        +------------------+
 |                  |  SQL  |                  |  S3   |                  |
 |   PostgreSQL     |<----->|   API Server     |<----->|     AWS S3       |
 |   (metadata)     |       |   (Go/Gin)       |       |   (file storage) |
