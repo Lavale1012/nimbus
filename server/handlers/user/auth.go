@@ -79,8 +79,8 @@ func Login(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	//Query user by email
-	err := db.Where("email = ?", loginRequest.Email).First(&user).Error
+	//Query user by email and preload their boxes
+	err := db.Preload("Boxes").Where("email = ?", loginRequest.Email).First(&user).Error
 	var isValid bool
 
 	if err != nil {
@@ -104,7 +104,12 @@ func Login(c *gin.Context, db *gorm.DB) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email})
+	// Default to first box name, or empty if user has no boxes
+	boxName := ""
+	if len(user.Boxes) > 0 {
+		boxName = user.Boxes[0].Name
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email, "box": boxName})
 }
 
 func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {

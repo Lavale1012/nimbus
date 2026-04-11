@@ -21,7 +21,6 @@ nim cd myfolder     # Go to myfolder (relative)
 nim cd /some/path   # Go to absolute path
 nim cd ..           # Go up one level`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement cd functionality
 		// 1. Connect to Redis
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
@@ -126,7 +125,6 @@ var pwdCmd = &cobra.Command{
 	Long:  `Display the current working directory path within your box.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement pwd functionality
 		// 1. Connect to Redis
 
 		RDB, err := cache.NewRedisClient()

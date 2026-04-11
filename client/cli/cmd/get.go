@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -41,17 +43,17 @@ var GetFileCmd = &cobra.Command{
 	Short: "A brief description of your command",
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// stop := make(chan struct{})
-		// go animations.StartSpinner(stop)
-		// defer func() {
-		// 	close(stop)
-		// 	fmt.Println()
-		// }()
-		endpoint := "http://localhost:8080/v1/api/files"
-		query := "?key=" + keyFlag
-
-		if endpoint == "" {
-			return fmt.Errorf("please provide --file (the S3 key to download)")
+		RDB, err := cache.NewRedisClient()
+		if err != nil {
+			return fmt.Errorf("failed to create Redis client: %w", err)
+		}
+		defer RDB.Close()
+		IsLoggedIn, err := helpers.SessionExists(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to check login status: %w", err)
+		}
+		if !IsLoggedIn {
+			return fmt.Errorf("you are not logged in, please login first")
 		}
 
 		if keyFlag == "" {
@@ -61,13 +63,21 @@ var GetFileCmd = &cobra.Command{
 			outputFileFlag = filepath.Base(keyFlag)
 		}
 
+		endpoint := "http://nim.test/v1/api/files?key=" + keyFlag
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+query, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 		if err != nil {
 			return fmt.Errorf("build request: %w", err)
 		}
+
+		jwtToken, err := cache.GetAuthToken(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to get auth token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
 		client := &http.Client{Timeout: 60 * time.Second}
 		resp, err := client.Do(req)

@@ -67,6 +67,13 @@ var deleteFileCmd = &cobra.Command{
 			bar.Finish()
 			return fmt.Errorf("build request: %w", err)
 		}
+		jwtToken, err := cache.GetAuthToken(RDB)
+		if err != nil {
+			bar.Finish()
+			return fmt.Errorf("failed to get auth token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
