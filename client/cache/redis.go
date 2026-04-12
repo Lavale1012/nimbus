@@ -38,7 +38,7 @@ func GetAuthToken(rdb *redis.Client) (string, error) {
 func SetAuthToken(rdb *redis.Client, userID uint, email, box, token string) error {
 	ctx := context.Background()
 	key := "user:session"
-	field := map[string]interface{}{
+	field := map[string]any{
 		"JWT_Token":   token,
 		"Email":       email,
 		"UserID":      userID,
@@ -110,4 +110,13 @@ func GetCurrentPath(rdb *redis.Client) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+func SessionExists(rdb *redis.Client) (bool, error) {
+	ctx := context.Background()
+	key := "user:session"
+	exists, err := rdb.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return exists > 0, nil
 }

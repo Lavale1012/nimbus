@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +39,7 @@ nim cdir my-folder path/to/parent`,
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
@@ -115,8 +114,10 @@ nim cdir my-folder path/to/parent`,
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 
-		done <- true
-		bar.Finish()
+		if resp != nil {
+			done <- true
+			bar.Finish()
+		}
 
 		if err != nil {
 			return fmt.Errorf("error creating folder: %w", err)

@@ -12,24 +12,10 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/utils/helpers"
+	"github.com/nimbus/cli/cli/types"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
-
-// ProgressReader wraps an io.Reader and updates a progress bar as data is read
-type ProgressReader struct {
-	Reader io.Reader
-	bar    *progressbar.ProgressBar
-}
-
-func (pr *ProgressReader) Read(p []byte) (int, error) {
-	n, err := pr.Reader.Read(p)
-	if n > 0 {
-		pr.bar.Add(n)
-	}
-	return n, err
-}
 
 var (
 	destinationFlag string
@@ -49,7 +35,7 @@ Example:
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer RDB.Close()
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
@@ -110,7 +96,7 @@ Example:
 			"uploading "+filepath.Base(filePathFlag),
 		)
 
-		var progressReader *ProgressReader
+		var progressReader *types.ProgressReader
 		var finalErr error
 
 		// Ensure progress bar is finished on any exit path
@@ -124,9 +110,9 @@ Example:
 		}()
 
 		// Create a progress reader that wraps the body
-		progressReader = &ProgressReader{
+		progressReader = &types.ProgressReader{
 			Reader: &body,
-			bar:    bar,
+			Bar:    bar,
 		}
 
 		req, err := http.NewRequest(http.MethodPost, endpoint, progressReader)

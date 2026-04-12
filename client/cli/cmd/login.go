@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"syscall"
 	"time"
 
@@ -21,11 +20,6 @@ import (
 	"golang.org/x/term"
 )
 
-func isEmailValid(e string) bool {
-	emailRegex := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-	return emailRegex.MatchString(e)
-}
-
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
 	Use:   "login",
@@ -37,7 +31,7 @@ var loginCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		SessionExist, err := helpers.SessionExists(redisClient)
+		SessionExist, err := cache.SessionExists(redisClient)
 		if err != nil {
 			return fmt.Errorf("failed to check session existence: %w", err)
 		}
@@ -57,7 +51,7 @@ var loginCmd = &cobra.Command{
 		if loginRequest.Email == "" {
 			return fmt.Errorf("email cannot be empty")
 		}
-		if !isEmailValid(loginRequest.Email) {
+		if !helpers.IsEmailValid(loginRequest.Email) {
 			return fmt.Errorf("invalid email format")
 		}
 		fmt.Printf("Enter password: ")

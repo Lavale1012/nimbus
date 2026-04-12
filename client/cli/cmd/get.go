@@ -15,24 +15,10 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/utils/helpers"
+	"github.com/nimbus/cli/cli/types"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
-
-// ProgressWriter wraps an io.Writer and updates a progress bar as data is written
-type ProgressWriter struct {
-	Writer io.Writer
-	bar    *progressbar.ProgressBar
-}
-
-func (pw *ProgressWriter) Write(p []byte) (int, error) {
-	n, err := pw.Writer.Write(p)
-	if n > 0 {
-		pw.bar.Add(n)
-	}
-	return n, err
-}
 
 var keyFlag string
 var outputFileFlag string
@@ -48,7 +34,7 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer RDB.Close()
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
@@ -104,9 +90,9 @@ var GetFileCmd = &cobra.Command{
 		)
 
 		// Create a progress writer that wraps the file
-		progressWriter := &ProgressWriter{
+		progressWriter := &types.ProgressWriter{
 			Writer: outFile,
-			bar:    bar,
+			Bar:    bar,
 		}
 
 		// Copy with progress bar tracking actual HTTP response data

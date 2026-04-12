@@ -1,11 +1,17 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/cli/types"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +33,7 @@ nim cd ..           # Go up one level`,
 			return fmt.Errorf("Cache error: %w", err)
 		}
 		// 2. Check if logged in
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
@@ -132,7 +138,7 @@ var pwdCmd = &cobra.Command{
 			return fmt.Errorf("Cache error: %w", err)
 		}
 		// 2. Check if logged in
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
@@ -173,15 +179,111 @@ var lsCmd = &cobra.Command{
 nim ls myfolder     # List contents of myfolder
 nim ls /some/path   # List contents of absolute path`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement ls functionality
 		// 1. Connect to Redis
+		RDB, err := cache.NewRedisClient()
+		if err != nil {
+			return fmt.Errorf("Cache error: %w", err)
+		}
+		defer RDB.Close()
+
 		// 2. Check if logged in
+		IsLoggedIn, err := cache.SessionExists(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to check login status: %w", err)
+		}
+		if !IsLoggedIn {
+			return fmt.Errorf("you are not logged in, please login first")
+		}
+
 		// 3. Check if box is set
+		CurrentBox, err := cache.GetBoxName(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to get current box from cache: %w", err)
+		}
+		if CurrentBox == "" {
+			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
+		}
+
 		// 4. Get current path from cache
+		currentPath, _ := cache.GetCurrentPath(RDB)
+
 		// 5. Determine target path (current or arg)
+		targetPath := currentPath
+		if len(args) > 0 {
+			arg := args[0]
+			if strings.HasPrefix(arg, "/") {
+				targetPath = strings.TrimPrefix(arg, "/")
+			} else {
+				if currentPath == "" {
+					targetPath = arg
+				} else {
+					targetPath = currentPath + "/" + arg
+				}
+			}
+		}
+		targetPath = strings.Trim(targetPath, "/")
+
 		// 6. Query server for directory listing
-		// 7. Display results (folders and files)
-		return fmt.Errorf("ls command not yet implemented")
+		endpoint := fmt.Sprintf(
+			"http://nim.test/v1/api/folders?box_name=%s&path=%s",
+			url.QueryEscape(CurrentBox),
+			url.QueryEscape(targetPath),
+		)
+
+		jwtToken, err := cache.GetAuthToken(RDB)
+		if err != nil {
+			return fmt.Errorf("failed to get auth token: %w", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return fmt.Errorf("failed to build request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("error fetching directory listing: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var errBody map[string]string
+			json.NewDecoder(resp.Body).Decode(&errBody)
+			if msg, ok := errBody["error"]; ok {
+				return fmt.Errorf("%s", msg)
+			}
+			return fmt.Errorf("failed to list directory: %s", resp.Status)
+		}
+
+		var listing types.ListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&listing); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		// 7. Display results
+		displayPath := CurrentBox + listing.Path
+		fmt.Printf("%s\n\n", displayPath)
+
+		if len(listing.Folders) == 0 && len(listing.Files) == 0 {
+			fmt.Println("  (empty)")
+			return nil
+		}
+
+		for _, f := range listing.Folders {
+			fmt.Printf("  [dir]  %s/\n", f.Name)
+		}
+		for _, f := range listing.Files {
+			fmt.Printf("  [file] %-30s %s\n", f.Name, helpers.FormatSize(f.Size))
+		}
+
+		fmt.Printf("\n  %d folder(s), %d file(s)\n", len(listing.Folders), len(listing.Files))
+
+		return nil
 	},
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/utils/helpers"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +18,7 @@ var logoutCmd = &cobra.Command{
 		}
 		defer rdb.Close()
 
-		IsLoggedIn, err := helpers.SessionExists(rdb)
+		IsLoggedIn, err := cache.SessionExists(rdb)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}

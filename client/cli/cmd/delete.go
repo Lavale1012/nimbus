@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +28,7 @@ var deleteFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer RDB.Close()
-		IsLoggedIn, err := helpers.SessionExists(RDB)
+		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
