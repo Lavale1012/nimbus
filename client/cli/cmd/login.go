@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
@@ -99,13 +96,13 @@ var loginCmd = &cobra.Command{
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 
+		if err != nil {
+			return fmt.Errorf("failed to perform request: %w", err)
+		}
 		// Stop spinner
 		done <- true
 		bar.Finish()
 
-		if err != nil {
-			return fmt.Errorf("failed to perform request: %w", err)
-		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
