@@ -28,9 +28,11 @@ var filePostCmd = &cobra.Command{
 	Long: `Upload a file to the Nimbus storage system.
 
 Example:
-  nim post -f myfile.txt -d uploads/myfile.txt`,
+nim post -f myfile.txt -d uploads/myfile.txt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
+		var body bytes.Buffer
+
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
@@ -69,7 +71,6 @@ Example:
 			return fmt.Errorf("error getting file info: %v", err)
 		}
 
-		var body bytes.Buffer
 		w := multipart.NewWriter(&body)
 
 		// Note: user_id and box_id are sent as URL query parameters

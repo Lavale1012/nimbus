@@ -12,6 +12,8 @@ var logoutCmd = &cobra.Command{
 	Short: "Log out of your Nimbus account",
 	Long:  `Log out of your Nimbus account by clearing the local session cache.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var response string
+
 		rdb, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("failed to connect to cache: %w", err)
@@ -27,7 +29,6 @@ var logoutCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Printf("Are you sure you want to logout? [Y/N]: ")
-		var response string
 		fmt.Scanln(&response)
 		if response != "Y" && response != "y" {
 			fmt.Println("Logout cancelled.")

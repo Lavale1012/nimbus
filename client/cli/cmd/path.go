@@ -29,6 +29,8 @@ nim cd ..           # Go up one level`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Connect to Redis
 		RDB, err := cache.NewRedisClient()
+		var newPath string
+
 		if err != nil {
 			return fmt.Errorf("Cache error: %w", err)
 		}
@@ -54,7 +56,6 @@ nim cd ..           # Go up one level`,
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
 		// 5. Calculate new path (handle .., relative, absolute)
-		var newPath string
 		if len(args) == 0 {
 			// nim cd → go to root
 			newPath = ""

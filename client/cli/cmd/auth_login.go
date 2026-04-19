@@ -23,6 +23,9 @@ var loginCmd = &cobra.Command{
 	Short: "Authenticate with your Nimbus account",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var loginResponse types.LoginResponse
+		var loginRequest types.LoginRequest
+
 		// Implement the login functionality here
 		redisClient, err := cache.NewRedisClient()
 		if err != nil {
@@ -37,8 +40,6 @@ var loginCmd = &cobra.Command{
 			return nil
 		}
 		defer redisClient.Close()
-		var loginResponse types.LoginResponse
-		var loginRequest types.LoginRequest
 		// Populate loginRequest with user input (e.g., flags or prompts)
 
 		banner.ShowLoginBanner()
