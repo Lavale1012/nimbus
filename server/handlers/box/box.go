@@ -24,6 +24,8 @@ const (
 
 func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
+	var existing models.Box
+
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -50,7 +52,6 @@ func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	sanitizedName = strings.ReplaceAll(sanitizedName, " ", "_")
 
 	// Check for duplicate box name under this user
-	var existing models.Box
 	if err := db.Where("name = ? AND user_id = ?", sanitizedName, user.ID).First(&existing).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "a box with that name already exists"})
 		return
@@ -90,5 +91,63 @@ func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusCreated, gin.H{"message": "box created successfully", "box": sanitizedName})
 }
 
-func DeleteBox() {}
-func ListBoxes() {}
+func DeleteBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
+	user, err := jwt.AuthenticateUser(c, db)
+	var box models.Box
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	boxName := c.Query("box_name")
+	if boxName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "box name is required"})
+		return
+	}
+
+	sanitizedName := filepath.Base(boxName)
+	sanitizedName = strings.ReplaceAll(sanitizedName, " ", "_")
+
+	if err := db.Where("name = ? AND user_id = ?", sanitizedName, user.ID).First(&box).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "box not found"})
+		return
+	}
+
+	key := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, sanitizedName)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	_, err = h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &h.Bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete box from storage"})
+		return
+	}
+
+	if err := db.Delete(&box).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete box from database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "box deleted successfully"})
+}
+func ListBoxes(h s3db.Config, c *gin.Context, db *gorm.DB) {
+	user, err := jwt.AuthenticateUser(c, db)
+	var boxes []models.Box
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	if err := db.Where("user_id = ?", user.ID).Find(&boxes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list boxes"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"boxes": boxes})
+}
