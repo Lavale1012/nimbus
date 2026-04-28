@@ -151,3 +151,29 @@ func ListBoxes(h s3db.Config, c *gin.Context, db *gorm.DB) {
 
 	c.JSON(http.StatusOK, gin.H{"boxes": boxes})
 }
+
+func VerifyBoxExist(h s3db.Config, c *gin.Context, db *gorm.DB) {
+	user, err := jwt.AuthenticateUser(c, db)
+	var box models.Box
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	boxName := c.Query("box_name")
+	if boxName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "box name is required"})
+		return
+	}
+
+	sanitizedName := filepath.Base(boxName)
+	sanitizedName = strings.ReplaceAll(sanitizedName, " ", "_")
+
+	if err := db.Where("name = ? AND user_id = ?", sanitizedName, user.ID).First(&box).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "box not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "box exists"})
+}
