@@ -22,5 +22,8 @@ func InitFolderRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 		route.DELETE("/folders", func(c *gin.Context) {
 			folder.Delete(config, c, db)
 		})
+		route.PATCH("/folders/rename", func(c *gin.Context) {
+			folder.Rename(config, c, db)
+		})
 	}
 }
