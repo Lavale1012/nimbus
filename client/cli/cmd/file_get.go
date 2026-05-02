@@ -15,10 +15,22 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/cli/types"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
+
+type ProgressWriter struct {
+	Writer io.Writer
+	Bar    *progressbar.ProgressBar
+}
+
+func (pw *ProgressWriter) Write(p []byte) (int, error) {
+	n, err := pw.Writer.Write(p)
+	if n > 0 {
+		pw.Bar.Add(n)
+	}
+	return n, err
+}
 
 var keyFlag string
 var outputFileFlag string
@@ -90,7 +102,7 @@ var GetFileCmd = &cobra.Command{
 		)
 
 		// Create a progress writer that wraps the file
-		progressWriter := &types.ProgressWriter{
+		progressWriter := &ProgressWriter{
 			Writer: outFile,
 			Bar:    bar,
 		}

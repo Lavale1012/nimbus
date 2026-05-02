@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/redis/go-redis/v9"
@@ -35,15 +36,21 @@ func GetAuthToken(rdb *redis.Client) (string, error) {
 	return token, nil
 }
 
-func SetAuthToken(rdb *redis.Client, userID uint, email, box, token string) error {
+func SetAuthToken(rdb *redis.Client, userID uint, email string, box []map[string]any, token string) error {
 	ctx := context.Background()
 	key := "user:session"
+	currentBox := ""
+	if len(box) > 0 {
+		if name, ok := box[0]["name"].(string); ok {
+			currentBox = name
+		}
+	}
 	field := map[string]any{
 		"JWT_Token":   token,
 		"Email":       email,
 		"UserID":      userID,
-		"CurrentBox":  box,
-		"CurrentPath": nil,
+		"CurrentBox":  currentBox,
+		"CurrentPath": "",
 	}
 	err := rdb.HSet(ctx, key, field).Err()
 	if err != nil {
@@ -66,11 +73,55 @@ func SetBoxName(rdb *redis.Client, boxName string) error {
 	ctx := context.Background()
 	key := "user:session"
 	field := "CurrentBox"
-	err := rdb.HSet(ctx, key, field, boxName).Err()
+
+	if boxName == "" {
+		return errors.New("box name cannot be empty")
+	}
+
+	exists, err := rdb.HExists(ctx, key, "Boxes").Result()
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("boxes not found")
+	}
+
+	err = rdb.HSet(ctx, key, field, boxName).Err()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func BoxExists(rdb *redis.Client, boxName string) (bool, error) {
+	ctx := context.Background()
+	key := "user:session"
+	data, err := rdb.HGet(ctx, key, "Boxes").Result()
+	if err == redis.Nil {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	var boxes []map[string]any
+	if err := json.Unmarshal([]byte(data), &boxes); err != nil {
+		return false, err
+	}
+	for _, box := range boxes {
+		if name, ok := box["name"].(string); ok && name == boxName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func StoreBoxes(rdb *redis.Client, boxes []map[string]any) error {
+	ctx := context.Background()
+	key := "user:session"
+	data, err := json.Marshal(boxes)
+	if err != nil {
+		return err
+	}
+	return rdb.HSet(ctx, key, "Boxes", string(data)).Err()
 }
 
 func GetBoxName(rdb *redis.Client) (string, error) {

@@ -325,7 +325,118 @@ func List(h s3db.Config, c *gin.Context, db *gorm.DB) {
 		Folders:    folderEntries,
 	})
 }
+func Move(h s3db.Config, c *gin.Context, db *gorm.DB) {
+	user, err := jwt.AuthenticateUser(c, db)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	boxName := c.Query("box_name")
+	if boxName == "" {
+		c.JSON(400, gin.H{"error": "box_name is required"})
+		return
+	}
+
+	_, err = helpers.ValidateBoxOwnership(db, boxName, user.ID)
+	if err != nil {
+		c.JSON(403, gin.H{"error": "box not found or access denied"})
+		return
+	}
+
+}
 func Upload(h s3db.Config, c *gin.Context) {}
-func Delete(h s3db.Config, c *gin.Context) {}
-func Move(h s3db.Config, c *gin.Context)   {}
 func Rename(h s3db.Config, c *gin.Context) {}
+
+func Delete(h s3db.Config, c *gin.Context, db *gorm.DB) {
+	user, err := jwt.AuthenticateUser(c, db)
+	if err != nil {
+		c.JSON(401, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	boxName := c.Query("box_name")
+	if boxName == "" {
+		c.JSON(400, gin.H{"error": "box_name is required"})
+		return
+	}
+
+	folderName := c.Query("folder_name")
+	if folderName == "" {
+		c.JSON(400, gin.H{"error": "folder_name is required"})
+		return
+	}
+
+	box, err := helpers.ValidateBoxOwnership(db, boxName, user.ID)
+	if err != nil {
+		c.JSON(403, gin.H{"error": "box not found or access denied"})
+		return
+	}
+
+	pathParam := strings.Trim(c.Query("path"), "/")
+
+	// Resolve the target folder in the DB
+	folderID := helpers.GetParentFolderID(db, user.ID, boxName, func() string {
+		if pathParam == "" {
+			return folderName
+		}
+		return pathParam + "/" + folderName
+	}())
+	if folderID == nil {
+		c.JSON(404, gin.H{"error": "folder not found"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	// Build the S3 prefix for this folder
+	var s3Prefix string
+	if pathParam == "" {
+		s3Prefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/%s/", user.ID, box.Name, folderName)
+	} else {
+		s3Prefix = fmt.Sprintf("users/nim-user-%d/boxes/%s/%s/%s/", user.ID, box.Name, pathParam, folderName)
+	}
+
+	// Delete all S3 objects under the prefix (skip if S3 not configured)
+	if h.Client != nil && h.Bucket != "" {
+		list, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: &h.Bucket,
+			Prefix: &s3Prefix,
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to list folder contents in S3"})
+			return
+		}
+		for _, obj := range list.Contents {
+			key := *obj.Key
+			h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: &h.Bucket,
+				Key:    &key,
+			})
+		}
+	}
+
+	// Recursively delete all DB records under this folder (files + subfolders)
+	if err := deleteFolderTree(db, *folderID); err != nil {
+		c.JSON(500, gin.H{"error": "failed to delete folder records from database"})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "folder deleted successfully"})
+}
+
+// deleteFolderTree recursively deletes a folder and all its contents from the DB.
+func deleteFolderTree(db *gorm.DB, folderID uint) error {
+	var subfolders []models.Folder
+	db.Where("parent_id = ?", folderID).Find(&subfolders)
+	for _, sub := range subfolders {
+		if err := deleteFolderTree(db, sub.ID); err != nil {
+			return err
+		}
+	}
+	if err := db.Where("folder_id = ?", folderID).Delete(&models.File{}).Error; err != nil {
+		return err
+	}
+	return db.Delete(&models.Folder{}, folderID).Error
+}

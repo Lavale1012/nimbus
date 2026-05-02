@@ -11,10 +11,31 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/cli/types"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/spf13/cobra"
 )
+
+type ListResponse struct {
+	FolderID   *uint         `json:"folder_id"`
+	FolderName string        `json:"folder_name"`
+	Path       string        `json:"path"`
+	Files      []FileEntry   `json:"files"`
+	Folders    []FolderEntry `json:"folders"`
+}
+
+type FileEntry struct {
+	ID        uint   `json:"id"`
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	S3Key     string `json:"s3_key"`
+	CreatedAt string `json:"created_at"`
+}
+
+type FolderEntry struct {
+	ID        uint   `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+}
 
 // cdCmd represents the cd command - change current path
 var cdCmd = &cobra.Command{
@@ -261,7 +282,7 @@ nim ls /some/path   # List contents of absolute path`,
 			return fmt.Errorf("failed to list directory: %s", resp.Status)
 		}
 
-		var listing types.ListResponse
+		var listing ListResponse
 		if err := json.NewDecoder(resp.Body).Decode(&listing); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}

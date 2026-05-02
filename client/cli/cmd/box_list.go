@@ -7,9 +7,17 @@ import (
 	"net/http"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/cli/types"
 	"github.com/spf13/cobra"
 )
+
+type BoxEntry struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+type ListBoxesResponse struct {
+	Boxes []BoxEntry `json:"boxes"`
+}
 
 var ListBoxesCmd = &cobra.Command{
 	Use:     "bls",
@@ -57,7 +65,7 @@ var ListBoxesCmd = &cobra.Command{
 			return fmt.Errorf("failed to list boxes: %s — %s", resp.Status, string(errBody))
 		}
 
-		var result types.ListBoxesResponse
+		var result ListBoxesResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}

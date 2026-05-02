@@ -10,12 +10,24 @@ import (
 
 	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/cli/types"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type LoginResponse struct {
+	Message string           `json:"message"`
+	Token   string           `json:"token"`
+	Email   string           `json:"email"`
+	UserID  uint             `json:"user_id"`
+	Box     []map[string]any `json:"box"`
+}
 
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
@@ -23,8 +35,8 @@ var loginCmd = &cobra.Command{
 	Short: "Authenticate with your Nimbus account",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var loginResponse types.LoginResponse
-		var loginRequest types.LoginRequest
+		var loginResponse LoginResponse
+		var loginRequest LoginRequest
 
 		// Implement the login functionality here
 		redisClient, err := cache.NewRedisClient()
@@ -116,6 +128,11 @@ var loginCmd = &cobra.Command{
 		err = cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Box, loginResponse.Token)
 		if err != nil {
 			return fmt.Errorf("failed to cache session: %w", err)
+		}
+
+		err = cache.StoreBoxes(redisClient, loginResponse.Box)
+		if err != nil {
+			return fmt.Errorf("failed to store boxes: %w", err)
 		}
 		fmt.Println("Login successful")
 		fmt.Printf("Welcome back, %s\n", loginResponse.Email)

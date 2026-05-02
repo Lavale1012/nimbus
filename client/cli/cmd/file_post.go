@@ -12,10 +12,22 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/nimbus/cli/cli/types"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
+
+type ProgressReader struct {
+	Reader io.Reader
+	Bar    *progressbar.ProgressBar
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	if n > 0 {
+		pr.Bar.Add(n)
+	}
+	return n, err
+}
 
 var (
 	destinationFlag string
@@ -97,7 +109,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 			"uploading "+filepath.Base(filePathFlag),
 		)
 
-		var progressReader *types.ProgressReader
+		var progressReader *ProgressReader
 		var finalErr error
 
 		// Ensure progress bar is finished on any exit path
@@ -111,7 +123,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		}()
 
 		// Create a progress reader that wraps the body
-		progressReader = &types.ProgressReader{
+		progressReader = &ProgressReader{
 			Reader: &body,
 			Bar:    bar,
 		}

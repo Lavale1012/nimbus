@@ -30,6 +30,12 @@ var setCurrentBoxCmd = &cobra.Command{
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
+		if exists, err := cache.BoxExists(RDB, boxName); err != nil {
+			return fmt.Errorf("failed to check box existence: %w", err)
+		} else if !exists {
+			return fmt.Errorf("box '%s' does not exist", boxName)
+		}
+
 		if err := cache.SetBoxName(RDB, boxName); err != nil {
 			return fmt.Errorf("failed to set current box: %w", err)
 		}

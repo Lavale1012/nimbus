@@ -19,8 +19,8 @@ func InitFolderRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 		route.POST("/folders/upload", func(c *gin.Context) {
 			folder.Upload(config, c)
 		})
-		route.DELETE("/folders/:id", func(c *gin.Context) {
-			// Implement delete folder handler here
+		route.DELETE("/folders", func(c *gin.Context) {
+			folder.Delete(config, c, db)
 		})
 	}
 }
