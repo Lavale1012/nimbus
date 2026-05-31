@@ -127,10 +127,7 @@ nim cd ..           # Go up one level`,
 			newPath = strings.ReplaceAll(newPath, "//", "/")
 		}
 
-		// 6. Validate path exists (optional - query server)
-		// TODO: Could add server validation here
-
-		// 7. Save new path to cache
+		// 6. Save new path to cache
 		if err := cache.SetCurrentPath(RDB, newPath); err != nil {
 			return fmt.Errorf("failed to save path: %w", err)
 		}

@@ -10,11 +10,11 @@ import (
 func InitFileRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 	route := r.Group("v1/api")
 	{
-		route.GET("/files", func(c *gin.Context) {
-			file.Download(config, c, db)
+		route.GET("/files/presign-download", func(c *gin.Context) {
+			file.PresignDownload(config, c, db)
 		})
-		route.POST("/files", func(c *gin.Context) {
-			file.Upload(config, db, c)
+		route.POST("/files/presign-upload", func(c *gin.Context) {
+			file.PresignUpload(config, db, c)
 		})
 		route.DELETE("/files/:name", func(c *gin.Context) {
 			file.Delete(config, db, c)

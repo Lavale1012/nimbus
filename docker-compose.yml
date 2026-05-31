@@ -1,23 +1,6 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: nimbus-postgres
-    environment:
-      POSTGRES_USER: nimbus
-      POSTGRES_PASSWORD: nimbus
-      POSTGRES_DB: nimbus
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nimbus"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   localstack:
     image: localstack/localstack:latest
     container_name: nimbus-localstack
@@ -31,6 +14,24 @@ services:
       - localstack_data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
 
+  api:
+    build:
+      context: ./server
+      target: final
+    container_name: nimbus-api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      LOCAL_DEV: true
+      DATABASE_URL: "cloud-suite-db-instance.c4jeeky2it7l.us-east-1.rds.amazonaws.com"
+      AWS_REGION: us-east-1
+      S3_BUCKET: nimbus-bucket
+      S3_ENDPOINT: http://localstack:4566
+      S3_FORCE_PATH_STYLE: true
+    depends_on:
+      localstack:
+        condition: service_started
+
 volumes:
-  postgres_data:
   localstack_data:

@@ -3,10 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -34,6 +35,12 @@ var (
 	filePathFlag    string
 )
 
+type presignUploadResponse struct {
+	UploadURL string `json:"upload_url"`
+	S3Key     string `json:"s3_key"`
+	FileID    uint   `json:"file_id"`
+}
+
 var filePostCmd = &cobra.Command{
 	Use:   "post",
 	Short: "Upload a file to the API",
@@ -43,12 +50,11 @@ Example:
 nim post -f myfile.txt -d uploads/myfile.txt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
-		var body bytes.Buffer
-
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer RDB.Close()
+
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
@@ -56,7 +62,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if !IsLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
-		// Validate required flags
+
 		CurrentBox, err := cache.GetBoxName(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to get current box from cache: %w", err)
@@ -64,8 +70,6 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if CurrentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
-
-		endpoint := fmt.Sprintf("http://nim.test/v1/api/files?box_name=%s&filePath=%s", CurrentBox, destinationFlag)
 
 		if filePathFlag == "" {
 			return fmt.Errorf("please provide --file PATH")
@@ -77,96 +81,91 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		}
 		defer f.Close()
 
-		// Get file size for progress bar
 		fileInfo, err := f.Stat()
 		if err != nil {
 			return fmt.Errorf("error getting file info: %v", err)
 		}
 
-		w := multipart.NewWriter(&body)
+		filename := filepath.Base(filePathFlag)
 
-		// Note: user_id and box_id are sent as URL query parameters
-		fmt.Printf("📤 Sending box_name: %s (in URL)\n", CurrentBox)
-
-		part, err := w.CreateFormFile("file", filepath.Base(filePathFlag))
+		jwtToken, err := cache.GetAuthToken(RDB)
 		if err != nil {
-			return fmt.Errorf("failed to create form file: %w", err)
+			return fmt.Errorf("failed to get auth token: %w", err)
+		}
+		if jwtToken == "" {
+			return fmt.Errorf("no auth token found, please login first")
 		}
 
-		// Copy file to multipart form (no progress bar here)
-		if _, err := io.Copy(part, f); err != nil {
-			return fmt.Errorf("failed to copy file to form: %w", err)
-		}
-		if err := w.Close(); err != nil {
-			return fmt.Errorf("failed to close multipart writer: %w", err)
-		}
-
-		fmt.Printf("📦 Total request size: %d bytes\n", body.Len())
-
-		// Create progress bar for HTTP upload
-		bar := progressbar.DefaultBytes(
-			int64(body.Len()),
-			"uploading "+filepath.Base(filePathFlag),
+		// Step 1: request a presigned PUT URL from the server
+		presignEndpoint := fmt.Sprintf(
+			"http://nim.test/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream",
+			url.QueryEscape(CurrentBox),
+			url.QueryEscape(destinationFlag),
+			url.QueryEscape(filename),
 		)
 
-		var progressReader *ProgressReader
-		var finalErr error
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
 
-		// Ensure progress bar is finished on any exit path
-		defer func() {
-			if bar != nil {
-				bar.Finish()
-				if finalErr != nil {
-					fmt.Println() // Add newline after progress bar on error
-				}
-			}
-		}()
+		presignReq, err := http.NewRequestWithContext(ctx, http.MethodPost, presignEndpoint, nil)
+		if err != nil {
+			return fmt.Errorf("build presign request: %w", err)
+		}
+		presignReq.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		// Create a progress reader that wraps the body
-		progressReader = &ProgressReader{
-			Reader: &body,
+		client := &http.Client{Timeout: 15 * time.Second}
+		presignResp, err := client.Do(presignReq)
+		if err != nil {
+			return fmt.Errorf("error requesting upload URL: %w", err)
+		}
+		defer presignResp.Body.Close()
+
+		if presignResp.StatusCode < 200 || presignResp.StatusCode >= 300 {
+			errBody, _ := io.ReadAll(presignResp.Body)
+			return fmt.Errorf("failed to get upload URL: %s — %s", presignResp.Status, string(errBody))
+		}
+
+		var presignData presignUploadResponse
+		if err := json.NewDecoder(presignResp.Body).Decode(&presignData); err != nil {
+			return fmt.Errorf("failed to parse presign response: %w", err)
+		}
+
+		// Step 2: PUT the file directly to S3 using the presigned URL
+		bar := progressbar.DefaultBytes(fileInfo.Size(), "uploading "+filename)
+		defer bar.Finish()
+
+		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer uploadCancel()
+
+		fileData, err := io.ReadAll(f)
+		if err != nil {
+			return fmt.Errorf("error reading file: %w", err)
+		}
+
+		progressReader := &ProgressReader{
+			Reader: bytes.NewReader(fileData),
 			Bar:    bar,
 		}
 
-		req, err := http.NewRequest(http.MethodPost, endpoint, progressReader)
+		putReq, err := http.NewRequestWithContext(uploadCtx, http.MethodPut, presignData.UploadURL, progressReader)
 		if err != nil {
-			finalErr = fmt.Errorf("build request: %w", err)
-			return finalErr
+			return fmt.Errorf("build PUT request: %w", err)
 		}
-		req.ContentLength = int64(body.Len())
-		req.Header.Set("Content-Type", w.FormDataContentType())
-		jwtToken, err := cache.GetAuthToken(RDB)
-		if err != nil {
-			finalErr = fmt.Errorf("failed to get auth token: %w", err)
-			return finalErr
-		}
-		if jwtToken == "" {
-			finalErr = fmt.Errorf("no auth token found, please login first")
-			return finalErr
-		}
-		req.Header.Set("Authorization", "Bearer "+jwtToken)
-		// Add a request-scoped timeout (align with client timeout)
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		req = req.WithContext(ctx)
+		putReq.ContentLength = fileInfo.Size()
+		putReq.Header.Set("Content-Type", "application/octet-stream")
 
-		client := &http.Client{Timeout: 60 * time.Second}
-		resp, err := client.Do(req)
+		putResp, err := client.Do(putReq)
 		if err != nil {
-			finalErr = fmt.Errorf("error uploading file: %w", err)
-			return finalErr
+			return fmt.Errorf("error uploading file to S3: %w", err)
 		}
-		defer resp.Body.Close()
+		defer putResp.Body.Close()
 
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			fmt.Printf("\nSuccessfully uploaded %s (%d bytes)\n", filepath.Base(filePathFlag), fileInfo.Size())
-		} else {
-			errBody, _ := io.ReadAll(resp.Body)
-			fmt.Printf("\nUpload failed: %s\n", resp.Status)
-			fmt.Printf("Server response: %s\n", string(errBody))
-			finalErr = fmt.Errorf("upload failed: %s — %s", resp.Status, string(errBody))
-			return finalErr
+		if putResp.StatusCode < 200 || putResp.StatusCode >= 300 {
+			errBody, _ := io.ReadAll(putResp.Body)
+			return fmt.Errorf("S3 upload failed: %s — %s", putResp.Status, string(errBody))
 		}
+
+		fmt.Printf("\nSuccessfully uploaded %s (%d bytes)\n", filename, fileInfo.Size())
 		return nil
 	},
 }
@@ -175,7 +174,5 @@ func init() {
 	rootCmd.AddCommand(filePostCmd)
 	filePostCmd.Flags().StringVarP(&filePathFlag, "file", "f", "", "Path to file to upload (required)")
 	filePostCmd.Flags().StringVarP(&destinationFlag, "destination", "d", "", "Destination path for the uploaded file")
-
 	filePostCmd.MarkFlagRequired("file")
-
 }

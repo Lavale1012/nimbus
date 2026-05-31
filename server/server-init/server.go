@@ -3,6 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-contrib/cors"
@@ -61,6 +67,34 @@ func InitServer() error {
 	routes.InitFolderRoutes(r, config, DB)
 	routes.InitUserRoutes(r, DB, S3)
 
-	r.Run("localhost:8080")
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	srv := &http.Server{Addr: ":8080", Handler: r}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+	}
+
+	if sqlDB, err := DB.DB(); err == nil {
+		sqlDB.Close()
+	}
+
+	log.Println("Server exited cleanly")
 	return nil
 }

@@ -41,8 +41,6 @@ type FolderEntry struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// TODO: Implement folder operations with Postgres integration
-
 func Create(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	var err error
 	var user *models.User

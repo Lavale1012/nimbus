@@ -1,31 +1,28 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/joho/godotenv"
 )
 
 func GetEnv(key string) (string, error) {
-	// Try different possible locations for .env file
+	// Try to load a .env file (optional — env vars may already be set by the OS/container)
 	possiblePaths := []string{
-		".env",       // same directory as executable
-		"../.env",    // parent directory
-		"../../.env", // grandparent directory (from utils/)
+		".env",
+		"../.env",
+		"../../.env",
 	}
-
-	var err error
 	for _, path := range possiblePaths {
-		err = godotenv.Load(path)
-		if err == nil {
-			break // Successfully loaded
+		if godotenv.Load(path) == nil {
+			break
 		}
 	}
 
-	// If all paths failed, return the last error
-	if err != nil {
-		return "", err
+	val := os.Getenv(key)
+	if val == "" {
+		return "", fmt.Errorf("environment variable %q is not set", key)
 	}
-
-	return os.Getenv(key), nil
+	return val, nil
 }

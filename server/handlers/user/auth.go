@@ -104,11 +104,6 @@ func Login(c *gin.Context, db *gorm.DB) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	// Default to first box name, or empty if user has no boxes
-	// boxName := ""
-	// if len(user.Boxes) > 0 {
-	// 	boxName = user.Boxes[0].Name
-	// }
 	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email, "box": user.Boxes})
 }
 
