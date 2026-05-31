@@ -98,10 +98,11 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 
 		// Step 1: request a presigned PUT URL from the server
 		presignEndpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream",
+			"http://nim.test/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream&size=%d",
 			url.QueryEscape(CurrentBox),
 			url.QueryEscape(destinationFlag),
 			url.QueryEscape(filename),
+			fileInfo.Size(),
 		)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

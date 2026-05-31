@@ -13,6 +13,9 @@ func InitFolderRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 		route.GET("/folders", func(c *gin.Context) {
 			folder.List(config, c, db)
 		})
+		route.GET("/folders/download", func(c *gin.Context) {
+			folder.Download(config, c, db)
+		})
 		route.POST("/folders", func(c *gin.Context) {
 			folder.Create(config, c, db)
 		})
