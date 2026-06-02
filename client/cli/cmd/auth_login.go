@@ -10,8 +10,8 @@ import (
 
 	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/nimbus/cli/utils/helpers"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -29,34 +29,32 @@ type LoginResponse struct {
 	Box     []map[string]any `json:"box"`
 }
 
-// loginCmd represents the login command
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with your Nimbus account",
-	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var loginResponse LoginResponse
 		var loginRequest LoginRequest
 
-		// Implement the login functionality here
 		redisClient, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		SessionExist, err := cache.SessionExists(redisClient)
+		defer redisClient.Close()
+
+		sessionExists, err := cache.SessionExists(redisClient)
 		if err != nil {
 			return fmt.Errorf("failed to check session existence: %w", err)
 		}
-		if SessionExist {
+		if sessionExists {
 			fmt.Println("You are already logged in.")
 			return nil
 		}
-		defer redisClient.Close()
-		// Populate loginRequest with user input (e.g., flags or prompts)
 
 		banner.ShowLoginBanner()
 		fmt.Print("\n")
-		fmt.Printf("Enter email: ")
+
+		fmt.Print("Enter email: ")
 		fmt.Scanln(&loginRequest.Email)
 		if loginRequest.Email == "" {
 			return fmt.Errorf("email cannot be empty")
@@ -64,7 +62,8 @@ var loginCmd = &cobra.Command{
 		if !helpers.IsEmailValid(loginRequest.Email) {
 			return fmt.Errorf("invalid email format")
 		}
-		fmt.Printf("Enter password: ")
+
+		fmt.Print("Enter password: ")
 		password, _ := term.ReadPassword(int(syscall.Stdin))
 		loginRequest.Password = string(password)
 		fmt.Print("\n")
@@ -72,73 +71,38 @@ var loginCmd = &cobra.Command{
 			return fmt.Errorf("password cannot be empty")
 		}
 
-		// For demonstration, print the login request
-		MarshaledRequest, _ := json.Marshal(loginRequest)
-
-		endpoint := "http://nim.test/v1/api/auth/login"
-		req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(MarshaledRequest))
+		body, _ := json.Marshal(loginRequest)
+		req, err := http.NewRequest(http.MethodPost, "http://nim.test/v1/api/auth/login", bytes.NewBuffer(body))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		// Create spinner for authentication
-		bar := progressbar.NewOptions(-1,
-			progressbar.OptionSetDescription("Authenticating..."),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionClearOnFinish(),
-		)
-
-		// Start spinner in goroutine
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					bar.Add(1)
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}()
-
-		// Make HTTP request
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
+		stop := animations.Spinner("Authenticating...")
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		stop()
 
 		if err != nil {
 			return fmt.Errorf("failed to perform request: %w", err)
 		}
-		// Stop spinner
-		done <- true
-		bar.Finish()
-
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("login failed with status: %s", resp.Status)
+			return fmt.Errorf("login failed: %s", resp.Status)
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&loginResponse); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
-		err = cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Box, loginResponse.Token)
-		if err != nil {
+
+		if err := cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Box, loginResponse.Token); err != nil {
 			return fmt.Errorf("failed to cache session: %w", err)
 		}
-
-		err = cache.StoreBoxes(redisClient, loginResponse.Box)
-		if err != nil {
+		if err := cache.StoreBoxes(redisClient, loginResponse.Box); err != nil {
 			return fmt.Errorf("failed to store boxes: %w", err)
 		}
-		fmt.Println("Login successful")
-		fmt.Printf("Welcome back, %s\n", loginResponse.Email)
 
-		// Perform login logic, e.g., send loginRequest to server API
-
+		fmt.Printf("Login successful\nWelcome back, %s\n", loginResponse.Email)
 		return nil
 	},
 }

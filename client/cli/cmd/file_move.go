@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
 
 var fileMoveCmd = &cobra.Command{
-	Use:   "mv",
-	Short: "Move a file to a different folder",
+	Use:     "mv",
+	Short:   "Move a file to a different folder",
 	Example: `nim mv --key users/nim-user-1/boxes/Home-Box/notes.txt --to documents`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
@@ -23,27 +24,21 @@ var fileMoveCmd = &cobra.Command{
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		CurrentBox, err := cache.GetBoxName(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get current box from cache: %w", err)
-		}
-		if CurrentBox == "" {
+		currentBox, err := cache.GetBoxName(RDB)
+		if err != nil || currentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
 		s3Key, _ := cmd.Flags().GetString("key")
 		targetPath, _ := cmd.Flags().GetString("to")
-		if s3Key == "" {
-			return fmt.Errorf("--key is required")
-		}
 
 		jwtToken, err := cache.GetAuthToken(RDB)
 		if err != nil {
@@ -52,7 +47,7 @@ var fileMoveCmd = &cobra.Command{
 
 		endpoint := fmt.Sprintf(
 			"http://nim.test/v1/api/files/move?box_name=%s&key=%s&target_path=%s",
-			url.QueryEscape(CurrentBox),
+			url.QueryEscape(currentBox),
 			url.QueryEscape(s3Key),
 			url.QueryEscape(targetPath),
 		)
@@ -66,7 +61,10 @@ var fileMoveCmd = &cobra.Command{
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
+		stop := animations.Spinner("Moving file...")
 		resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+		stop()
+
 		if err != nil {
 			return fmt.Errorf("error moving file: %w", err)
 		}

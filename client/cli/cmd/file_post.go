@@ -13,22 +13,9 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/schollz/progressbar/v3"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
-
-type ProgressReader struct {
-	Reader io.Reader
-	Bar    *progressbar.ProgressBar
-}
-
-func (pr *ProgressReader) Read(p []byte) (int, error) {
-	n, err := pr.Reader.Read(p)
-	if n > 0 {
-		pr.Bar.Add(n)
-	}
-	return n, err
-}
 
 var (
 	destinationFlag string
@@ -43,7 +30,7 @@ type presignUploadResponse struct {
 
 var filePostCmd = &cobra.Command{
 	Use:   "post",
-	Short: "Upload a file to the API",
+	Short: "Upload a file to Nimbus storage",
 	Long: `Upload a file to the Nimbus storage system.
 
 Example:
@@ -55,67 +42,59 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		CurrentBox, err := cache.GetBoxName(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get current box from cache: %w", err)
-		}
-		if CurrentBox == "" {
+		currentBox, err := cache.GetBoxName(RDB)
+		if err != nil || currentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		if filePathFlag == "" {
-			return fmt.Errorf("please provide --file PATH")
+		jwtToken, err := cache.GetAuthToken(RDB)
+		if err != nil || jwtToken == "" {
+			return fmt.Errorf("no auth token found, please login first")
 		}
 
 		f, err := os.Open(filePathFlag)
 		if err != nil {
-			return fmt.Errorf("error opening file: %v", err)
+			return fmt.Errorf("error opening file: %w", err)
 		}
 		defer f.Close()
 
 		fileInfo, err := f.Stat()
 		if err != nil {
-			return fmt.Errorf("error getting file info: %v", err)
+			return fmt.Errorf("error getting file info: %w", err)
 		}
-
 		filename := filepath.Base(filePathFlag)
-
-		jwtToken, err := cache.GetAuthToken(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get auth token: %w", err)
-		}
-		if jwtToken == "" {
-			return fmt.Errorf("no auth token found, please login first")
-		}
 
 		// Step 1: request a presigned PUT URL from the server
 		presignEndpoint := fmt.Sprintf(
 			"http://nim.test/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream&size=%d",
-			url.QueryEscape(CurrentBox),
+			url.QueryEscape(currentBox),
 			url.QueryEscape(destinationFlag),
 			url.QueryEscape(filename),
 			fileInfo.Size(),
 		)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
+		presignCtx, presignCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer presignCancel()
 
-		presignReq, err := http.NewRequestWithContext(ctx, http.MethodPost, presignEndpoint, nil)
+		presignReq, err := http.NewRequestWithContext(presignCtx, http.MethodPost, presignEndpoint, nil)
 		if err != nil {
 			return fmt.Errorf("build presign request: %w", err)
 		}
 		presignReq.Header.Set("Authorization", "Bearer "+jwtToken)
 
+		stop := animations.Spinner("Requesting upload URL...")
 		client := &http.Client{Timeout: 15 * time.Second}
 		presignResp, err := client.Do(presignReq)
+		stop()
+
 		if err != nil {
 			return fmt.Errorf("error requesting upload URL: %w", err)
 		}
@@ -131,22 +110,20 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 			return fmt.Errorf("failed to parse presign response: %w", err)
 		}
 
-		// Step 2: PUT the file directly to S3 using the presigned URL
-		bar := progressbar.DefaultBytes(fileInfo.Size(), "uploading "+filename)
-		defer bar.Finish()
-
-		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer uploadCancel()
-
+		// Step 2: PUT the file directly to S3 with a live progress bar
 		fileData, err := io.ReadAll(f)
 		if err != nil {
 			return fmt.Errorf("error reading file: %w", err)
 		}
 
-		progressReader := &ProgressReader{
+		bar := animations.BytesBar(fileInfo.Size(), "Uploading "+filename)
+		progressReader := &animations.ProgressReader{
 			Reader: bytes.NewReader(fileData),
 			Bar:    bar,
 		}
+
+		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer uploadCancel()
 
 		putReq, err := http.NewRequestWithContext(uploadCtx, http.MethodPut, presignData.UploadURL, progressReader)
 		if err != nil {
@@ -155,7 +132,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		putReq.ContentLength = fileInfo.Size()
 		putReq.Header.Set("Content-Type", "application/octet-stream")
 
-		putResp, err := client.Do(putReq)
+		putResp, err := (&http.Client{Timeout: 10 * time.Minute}).Do(putReq)
 		if err != nil {
 			return fmt.Errorf("error uploading file to S3: %w", err)
 		}
@@ -166,7 +143,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 			return fmt.Errorf("S3 upload failed: %s — %s", putResp.Status, string(errBody))
 		}
 
-		fmt.Printf("\nSuccessfully uploaded %s (%d bytes)\n", filename, fileInfo.Size())
+		fmt.Printf("Uploaded %s (%d bytes)\n", filename, fileInfo.Size())
 		return nil
 	},
 }

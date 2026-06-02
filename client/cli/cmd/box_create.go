@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/schollz/progressbar/v3"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
 
@@ -28,19 +28,16 @@ var createBoxCmd = &cobra.Command{
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
 		jwtToken, err := cache.GetAuthToken(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get auth token: %w", err)
-		}
-		if jwtToken == "" {
+		if err != nil || jwtToken == "" {
 			return fmt.Errorf("no auth token found, please login first")
 		}
 
@@ -49,49 +46,23 @@ var createBoxCmd = &cobra.Command{
 			url.QueryEscape(boxName),
 		)
 
-		bar := progressbar.NewOptions(-1,
-			progressbar.OptionSetDescription("Creating box..."),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionClearOnFinish(),
-		)
-
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					bar.Add(1)
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}()
-
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 		if err != nil {
-			done <- true
-			bar.Finish()
 			return fmt.Errorf("failed to build request: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
+		stop := animations.Spinner("Creating box...")
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		stop()
+
 		if err != nil {
-			done <- true
-			bar.Finish()
 			return fmt.Errorf("error creating box: %w", err)
 		}
 		defer resp.Body.Close()
-
-		done <- true
-		bar.Finish()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(resp.Body)

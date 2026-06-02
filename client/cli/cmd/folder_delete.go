@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/schollz/progressbar/v3"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
 
@@ -62,44 +62,24 @@ var deleteFolderCmd = &cobra.Command{
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		bar := progressbar.NewOptions(-1,
-			progressbar.OptionSetDescription("Deleting folder..."),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionClearOnFinish(),
-		)
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					bar.Add(1)
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}()
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		done <- true
-		bar.Finish()
+		stop := animations.Spinner("Deleting folder...")
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		stop()
 
 		if err != nil {
 			return fmt.Errorf("error deleting folder: %w", err)
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == http.StatusNotFound {
+		switch resp.StatusCode {
+		case http.StatusOK:
+			fmt.Printf("Folder '%s' deleted successfully\n", folderName)
+		case http.StatusNotFound:
 			return fmt.Errorf("folder '%s' not found", folderName)
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		default:
 			return fmt.Errorf("failed to delete folder: %s", resp.Status)
 		}
 
-		fmt.Printf("Folder '%s' deleted successfully\n", folderName)
 		return nil
 	},
 }

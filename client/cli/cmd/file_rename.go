@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
 
 var fileRenameCmd = &cobra.Command{
-	Use:   "rename",
-	Short: "Rename a file",
+	Use:     "rename",
+	Short:   "Rename a file",
 	Example: `nim rename --key users/nim-user-1/boxes/Home-Box/notes.txt --name new_notes.txt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
@@ -24,27 +25,21 @@ var fileRenameCmd = &cobra.Command{
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		CurrentBox, err := cache.GetBoxName(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get current box from cache: %w", err)
-		}
-		if CurrentBox == "" {
+		currentBox, err := cache.GetBoxName(RDB)
+		if err != nil || currentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
 		s3Key, _ := cmd.Flags().GetString("key")
 		newName, _ := cmd.Flags().GetString("name")
-		if s3Key == "" || newName == "" {
-			return fmt.Errorf("--key and --name are required")
-		}
 
 		jwtToken, err := cache.GetAuthToken(RDB)
 		if err != nil {
@@ -53,7 +48,7 @@ var fileRenameCmd = &cobra.Command{
 
 		endpoint := fmt.Sprintf(
 			"http://nim.test/v1/api/files/rename?box_name=%s&key=%s&new_name=%s",
-			url.QueryEscape(CurrentBox),
+			url.QueryEscape(currentBox),
 			url.QueryEscape(s3Key),
 			url.QueryEscape(newName),
 		)
@@ -67,7 +62,10 @@ var fileRenameCmd = &cobra.Command{
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
+		stop := animations.Spinner("Renaming file...")
 		resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+		stop()
+
 		if err != nil {
 			return fmt.Errorf("error renaming file: %w", err)
 		}

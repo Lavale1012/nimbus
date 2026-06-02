@@ -12,22 +12,9 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/schollz/progressbar/v3"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
-
-type ProgressWriter struct {
-	Writer io.Writer
-	Bar    *progressbar.ProgressBar
-}
-
-func (pw *ProgressWriter) Write(p []byte) (int, error) {
-	n, err := pw.Writer.Write(p)
-	if n > 0 {
-		pw.Bar.Add(n)
-	}
-	return n, err
-}
 
 var keyFlag string
 var outputFileFlag string
@@ -46,26 +33,20 @@ var GetFileCmd = &cobra.Command{
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		if keyFlag == "" {
-			return fmt.Errorf("please provide --file (the S3 key to download)")
-		}
 		if outputFileFlag == "" {
 			outputFileFlag = filepath.Base(keyFlag)
 		}
 
-		CurrentBox, err := cache.GetBoxName(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get current box from cache: %w", err)
-		}
-		if CurrentBox == "" {
+		currentBox, err := cache.GetBoxName(RDB)
+		if err != nil || currentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
@@ -77,21 +58,24 @@ var GetFileCmd = &cobra.Command{
 		// Step 1: request a presigned GET URL from the server
 		presignEndpoint := fmt.Sprintf(
 			"http://nim.test/v1/api/files/presign-download?box_name=%s&key=%s",
-			url.QueryEscape(CurrentBox),
+			url.QueryEscape(currentBox),
 			url.QueryEscape(keyFlag),
 		)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
+		presignCtx, presignCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer presignCancel()
 
-		presignReq, err := http.NewRequestWithContext(ctx, http.MethodGet, presignEndpoint, nil)
+		presignReq, err := http.NewRequestWithContext(presignCtx, http.MethodGet, presignEndpoint, nil)
 		if err != nil {
 			return fmt.Errorf("build presign request: %w", err)
 		}
 		presignReq.Header.Set("Authorization", "Bearer "+jwtToken)
 
+		stop := animations.Spinner("Requesting download URL...")
 		client := &http.Client{Timeout: 15 * time.Second}
 		presignResp, err := client.Do(presignReq)
+		stop()
+
 		if err != nil {
 			return fmt.Errorf("error requesting download URL: %w", err)
 		}
@@ -107,7 +91,7 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse presign response: %w", err)
 		}
 
-		// Step 2: GET the file directly from S3 using the presigned URL
+		// Step 2: GET the file directly from S3 with a live progress bar
 		downloadCtx, downloadCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer downloadCancel()
 
@@ -116,7 +100,7 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("build download request: %w", err)
 		}
 
-		getResp, err := client.Do(getReq)
+		getResp, err := (&http.Client{Timeout: 10 * time.Minute}).Do(getReq)
 		if err != nil {
 			return fmt.Errorf("error downloading file from S3: %w", err)
 		}
@@ -129,18 +113,18 @@ var GetFileCmd = &cobra.Command{
 
 		outFile, err := os.Create(outputFileFlag)
 		if err != nil {
-			return fmt.Errorf("error creating output file: %v", err)
+			return fmt.Errorf("error creating output file: %w", err)
 		}
 		defer outFile.Close()
 
-		bar := progressbar.DefaultBytes(getResp.ContentLength, "downloading "+filepath.Base(keyFlag))
-		progressWriter := &ProgressWriter{Writer: outFile, Bar: bar}
+		bar := animations.BytesBar(getResp.ContentLength, "Downloading "+filepath.Base(keyFlag))
+		progressWriter := &animations.ProgressWriter{Writer: outFile, Bar: bar}
 
 		if _, err = io.Copy(progressWriter, getResp.Body); err != nil {
-			return fmt.Errorf("error saving file: %v", err)
+			return fmt.Errorf("error saving file: %w", err)
 		}
 
-		fmt.Printf("✅ Downloaded %s to %s\n", keyFlag, outputFileFlag)
+		fmt.Printf("Downloaded %s → %s\n", keyFlag, outputFileFlag)
 		return nil
 	},
 }

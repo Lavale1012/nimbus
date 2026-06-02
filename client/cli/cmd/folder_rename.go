@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
-	"github.com/schollz/progressbar/v3"
+	"github.com/nimbus/cli/cli/animations"
 	"github.com/spf13/cobra"
 )
 
@@ -64,30 +64,9 @@ var renameFolderCmd = &cobra.Command{
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		bar := progressbar.NewOptions(-1,
-			progressbar.OptionSetDescription("Renaming folder..."),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionClearOnFinish(),
-		)
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					bar.Add(1)
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}()
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		done <- true
-		bar.Finish()
+		stop := animations.Spinner("Renaming folder...")
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+		stop()
 
 		if err != nil {
 			return fmt.Errorf("error renaming folder: %w", err)
