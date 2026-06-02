@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,9 +30,33 @@ func InitServer() error {
 	if err != nil {
 		return err
 	}
-	r := gin.Default()
+
+	r := gin.New()
+	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
-	r.Use(cors.Default())
+
+	// Trust ALB and private RFC-1918 ranges so X-Forwarded-For gives real client IPs.
+	// In LOCAL_DEV mode trust all proxies since there's no ALB in docker-compose.
+	localDev, _ := utils.GetEnv("LOCAL_DEV")
+	if localDev == "true" {
+		r.SetTrustedProxies(nil)
+	} else {
+		r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
+	}
+
+	corsOrigins, _ := utils.GetEnv("CORS_ORIGINS")
+	origins := []string{"*"}
+	if corsOrigins != "" {
+		origins = strings.Split(corsOrigins, ",")
+	}
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: corsOrigins != "",
+		MaxAge:           12 * time.Hour,
+	}))
 
 	ctx := context.Background()
 
@@ -62,6 +87,7 @@ func InitServer() error {
 	if DB == nil {
 		return fmt.Errorf("failed to connect to PostgreSQL")
 	}
+
 	routes.InitFileRoutes(r, config, DB)
 	routes.InitBoxRoutes(r, config, DB)
 	routes.InitFolderRoutes(r, config, DB)
@@ -71,7 +97,13 @@ func InitServer() error {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	srv := &http.Server{Addr: ":8080", Handler: r}
+	srv := &http.Server{
+		Addr:         ":8080",
+		Handler:      r,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 300 * time.Second, // presign + large file ops
+		IdleTimeout:  60 * time.Second,
+	}
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

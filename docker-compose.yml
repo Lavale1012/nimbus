@@ -19,8 +19,8 @@ services:
       context: ./server
       target: final
     container_name: nimbus-api
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     environment:
       PORT: 8080
       LOCAL_DEV: true
@@ -32,17 +32,11 @@ services:
     depends_on:
       localstack:
         condition: service_started
-
-  nginx:
-    image: nginx:alpine
-    container_name: nimbus-nginx
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/proxy_params.conf:/etc/nginx/proxy_params.conf:ro
-    depends_on:
-      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   localstack_data:
