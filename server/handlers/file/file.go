@@ -188,7 +188,7 @@ func Delete(d s3db.Config, db *gorm.DB, c *gin.Context) {
 		Key:    &keyName,
 	}); err != nil {
 		log.Printf("[DELETE] S3 delete failed - user_id: %d, key: %s, error: %v", user.ID, keyName, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete object: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
 		return
 	}
 

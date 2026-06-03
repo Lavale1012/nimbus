@@ -44,6 +44,9 @@ func VerifyToken(tokenString string) error {
 	secretKey = []byte(secret)
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return secretKey, nil
 	})
 
@@ -66,6 +69,9 @@ func GetEmailFromToken(tokenString string) (string, error) {
 	secretKey = []byte(secret)
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return secretKey, nil
 	})
 	if err != nil {
