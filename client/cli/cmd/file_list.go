@@ -14,13 +14,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type fileListResponse struct {
-	Files []FileEntry `json:"files"`
+type lsResponse struct {
+	FolderName string        `json:"folder_name"`
+	Path       string        `json:"path"`
+	Files      []FileEntry   `json:"files"`
+	Folders    []FolderEntry `json:"folders"`
 }
 
+var listPathFlag string
+
 var fileListCmd = &cobra.Command{
-	Use:   "files",
-	Short: "List all files in the current box",
+	Use:     "ls",
+	Short:   "List files and folders in the current box or a specific folder",
+	Example: "nim ls\nnim ls --path documents\nnim ls --path documents/projects",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
@@ -28,19 +34,16 @@ var fileListCmd = &cobra.Command{
 		}
 		defer RDB.Close()
 
-		IsLoggedIn, err := cache.SessionExists(RDB)
+		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
 		}
-		if !IsLoggedIn {
+		if !isLoggedIn {
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		CurrentBox, err := cache.GetBoxName(RDB)
-		if err != nil {
-			return fmt.Errorf("failed to get current box from cache: %w", err)
-		}
-		if CurrentBox == "" {
+		currentBox, err := cache.GetBoxName(RDB)
+		if err != nil || currentBox == "" {
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
@@ -50,9 +53,12 @@ var fileListCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/files?box_name=%s",
-			url.QueryEscape(CurrentBox),
+			"http://nim.test/v1/api/folders?box_name=%s",
+			url.QueryEscape(currentBox),
 		)
+		if listPathFlag != "" {
+			endpoint += "&path=" + url.QueryEscape(listPathFlag)
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -65,33 +71,40 @@ var fileListCmd = &cobra.Command{
 
 		resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 		if err != nil {
-			return fmt.Errorf("error fetching files: %w", err)
+			return fmt.Errorf("error fetching contents: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("failed to list files: %s — %s", resp.Status, string(errBody))
+			return fmt.Errorf("failed to list contents: %s — %s", resp.Status, string(errBody))
 		}
 
-		var result fileListResponse
+		var result lsResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		if len(result.Files) == 0 {
-			fmt.Printf("%s: (no files)\n", CurrentBox)
+		totalItems := len(result.Folders) + len(result.Files)
+		if totalItems == 0 {
+			fmt.Printf("%s%s — (empty)\n", currentBox, result.Path)
 			return nil
 		}
 
-		fmt.Printf("%s — %d file(s)\n\n", CurrentBox, len(result.Files))
-		for _, f := range result.Files {
-			fmt.Printf("  %-40s %s\n", f.Name, helpers.FormatSize(f.Size))
+		fmt.Printf("%s%s — %d item(s)\n\n", currentBox, result.Path, totalItems)
+
+		for _, f := range result.Folders {
+			fmt.Printf("  [dir]  %s/\n", f.Name)
 		}
+		for _, f := range result.Files {
+			fmt.Printf("  [file] %-38s %s\n", f.Name, helpers.FormatSize(f.Size))
+		}
+
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(fileListCmd)
+	fileListCmd.Flags().StringVarP(&listPathFlag, "path", "p", "", "Folder path to list (e.g. documents or documents/projects)")
 }
