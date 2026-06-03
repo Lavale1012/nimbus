@@ -1,18 +1,39 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:15
+    container_name: nimbus-postgres
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: cloudsuitedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d cloudsuitedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   localstack:
     image: localstack/localstack:latest
     container_name: nimbus-localstack
     environment:
       SERVICES: s3
-      EDGE_PORT: 4566
       DEBUG: 1
     ports:
       - "4566:4566"
     volumes:
       - localstack_data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:4566/_localstack/health | grep -q '\"s3\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -24,19 +45,23 @@ services:
     environment:
       PORT: 8080
       LOCAL_DEV: true
-      DATABASE_URL: "cloud-suite-db-instance.c4jeeky2it7l.us-east-1.rds.amazonaws.com"
+      DATABASE_URL: "host=postgres user=${DB_USERNAME} password=${DB_PASSWORD} dbname=cloudsuitedb port=5432 sslmode=disable"
       AWS_REGION: us-east-1
-      S3_BUCKET: nimbus-bucket
+      S3_BUCKET: nimbus-cli-storage
       S3_ENDPOINT: http://localstack:4566
       S3_FORCE_PATH_STYLE: true
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
+      postgres:
+        condition: service_healthy
       localstack:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
 
 volumes:
+  postgres_data:
   localstack_data:
