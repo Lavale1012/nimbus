@@ -59,7 +59,7 @@ nim cdir my-folder path/to/parent`,
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/folders?box_name=%s&path=%s&folder_name=%s",
+			"http://localhost:8080/v1/api/folders?box_name=%s&path=%s&folder_name=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(currentPath),
 			url.QueryEscape(folderNameFlag),

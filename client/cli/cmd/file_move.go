@@ -46,7 +46,7 @@ var fileMoveCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/files/move?box_name=%s&key=%s&target_path=%s",
+			"http://localhost:8080/v1/api/files/move?box_name=%s&key=%s&target_path=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(s3Key),
 			url.QueryEscape(targetPath),

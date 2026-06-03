@@ -37,7 +37,7 @@ var deleteFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
-		endpoint := "http://nim.test/v1/api/files/" + deleteFilePathFlag
+		endpoint := "http://localhost:8080/v1/api/files/" + deleteFilePathFlag
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

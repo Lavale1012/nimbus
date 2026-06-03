@@ -42,7 +42,7 @@ var createBoxCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/boxes?box_name=%s",
+			"http://localhost:8080/v1/api/boxes?box_name=%s",
 			url.QueryEscape(boxName),
 		)
 

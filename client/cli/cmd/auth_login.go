@@ -72,7 +72,7 @@ var loginCmd = &cobra.Command{
 		}
 
 		body, _ := json.Marshal(loginRequest)
-		req, err := http.NewRequest(http.MethodPost, "http://nim.test/v1/api/auth/login", bytes.NewBuffer(body))
+		req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/v1/api/auth/login", bytes.NewBuffer(body))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}

@@ -244,7 +244,7 @@ nim ls /some/path   # List contents of absolute path`,
 
 		// 6. Query server for directory listing
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/folders?box_name=%s&path=%s",
+			"http://localhost:8080/v1/api/folders?box_name=%s&path=%s",
 			url.QueryEscape(CurrentBox),
 			url.QueryEscape(targetPath),
 		)

@@ -53,7 +53,7 @@ var fileListCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/folders?box_name=%s",
+			"http://localhost:8080/v1/api/folders?box_name=%s",
 			url.QueryEscape(currentBox),
 		)
 		if listPathFlag != "" {

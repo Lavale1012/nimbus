@@ -47,7 +47,7 @@ var ListBoxesCmd = &cobra.Command{
 			return fmt.Errorf("no auth token found, please login first")
 		}
 
-		req, err := http.NewRequest(http.MethodGet, "http://nim.test/v1/api/boxes", nil)
+		req, err := http.NewRequest(http.MethodGet, "http://localhost:8080/v1/api/boxes", nil)
 		if err != nil {
 			return fmt.Errorf("failed to build request: %w", err)
 		}

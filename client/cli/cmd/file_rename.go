@@ -47,7 +47,7 @@ var fileRenameCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/files/rename?box_name=%s&key=%s&new_name=%s",
+			"http://localhost:8080/v1/api/files/rename?box_name=%s&key=%s&new_name=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(s3Key),
 			url.QueryEscape(newName),

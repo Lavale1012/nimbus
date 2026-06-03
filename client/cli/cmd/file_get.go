@@ -57,7 +57,7 @@ var GetFileCmd = &cobra.Command{
 
 		// Step 1: request a presigned GET URL from the server
 		presignEndpoint := fmt.Sprintf(
-			"http://nim.test/v1/api/files/presign-download?box_name=%s&key=%s",
+			"http://localhost:8080/v1/api/files/presign-download?box_name=%s&key=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(keyFlag),
 		)
