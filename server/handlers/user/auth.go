@@ -74,6 +74,11 @@ func Login(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
+	if len(loginRequest.Password) > MAX_PASSWORD_LENGTH {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
 	if !isEmailValid(loginRequest.Email) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
 		return
