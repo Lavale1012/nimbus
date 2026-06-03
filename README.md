@@ -1,6 +1,6 @@
 # Nimbus CLI
 
-> A cloud file storage system controlled entirely from the terminal — built with production-grade security, a REST API backend, and S3 storage.
+> A cloud file storage system controlled entirely from the terminal — built with production-grade security, a REST API backend, and direct S3 storage.
 
 [![Development Status](https://img.shields.io/badge/status-under%20development-yellow)](#project-status)
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://golang.org)
@@ -19,10 +19,10 @@ The goal was to build something that mirrors how real SaaS products work under t
 | --- | --- |
 | API design | REST endpoints with JWT authentication and per-request ownership checks |
 | Distributed storage | Files in S3, metadata in PostgreSQL, kept in sync |
-| Security | Bcrypt hashing, timing attack mitigation, rate limiting, non-sequential IDs |
+| Security | Bcrypt hashing, timing attack mitigation, AWS WAF rate limiting, non-sequential IDs |
 | Session management | Redis cache on the client keeps the API fully stateless |
-| Infrastructure | Nginx reverse proxy, Docker for local S3 and database emulation |
-| CLI experience | Filesystem-style commands that feel native to the terminal |
+| Infrastructure | ALB + AWS WAF in production, Docker for local S3 and database emulation |
+| CLI experience | Filesystem-style commands with live progress bars and spinners |
 
 ---
 
@@ -33,17 +33,20 @@ The goal was to build something that mirrors how real SaaS products work under t
         |
         | HTTP
         v
-  Nginx (rate limiting + routing)
+  ALB (AWS load balancer)
+  + AWS WAF (rate limiting)
         |
         v
   API Server (Go/Gin)
       |         |
       v         v
  PostgreSQL    AWS S3
- (metadata)  (files)
+ (metadata)  (files, via presigned URLs)
 ```
 
-The CLI never talks to S3 directly. It sends requests to the API, which validates your identity, checks you own the target box, then handles the storage operation. Redis on the client side remembers your session so you stay logged in between commands.
+File data never passes through the API server. The server handles auth, validates ownership, generates a presigned S3 URL, and returns it to the CLI. The CLI then uploads or downloads directly to/from S3 — keeping the server fast and the file path efficient.
+
+Redis on the client side remembers your session so you stay logged in between commands.
 
 ---
 
@@ -56,7 +59,8 @@ Built to production standards, not just to pass a code review:
 - **Ownership checks** on every operation — you can only touch your own boxes and files
 - **Timing attack mitigation** — login always takes the same time whether the account exists or not, so attackers can't probe for valid emails
 - **Non-sequential IDs** — user and box IDs are randomly generated, not `1, 2, 3...`, which prevents enumeration
-- **Rate limiting** — Nginx caps auth at 5 req/s and file operations at 10 req/s per IP
+- **Rate limiting** — AWS WAF caps requests per IP at the load balancer layer
+- **Presigned S3 URLs** — file transfers go directly to S3 with time-limited, scoped credentials (15-min expiry)
 - **Audit logging** — failed logins are logged with IP; file operations log user, size, and duration
 
 ---
@@ -88,14 +92,19 @@ When you register, a default "Home-Box" is created automatically. You can create
 | `nim logout` | Sign out and clear local session |
 | `nim mkbox <name>` | Create a new box |
 | `nim rmbox <name>` | Delete a box and all its contents |
+| `nim bls` | List all your boxes |
 | `nim cb <name>` | Switch to a box |
-| `nim cdir <name>` | Create a folder in the current location |
-| `nim ls [path]` | List files and folders in the current directory |
+| `nim cdir <name>` | Create a folder in the current box |
+| `nim ls [path]` | List files and folders |
 | `nim cd <path>` | Navigate into a folder (supports `..` and `/absolute/paths`) |
 | `nim pwd` | Show your current location |
-| `nim post -f <file>` | Upload a file |
-| `nim get -f <file>` | Download a file |
+| `nim post -f <file>` | Upload a file (direct to S3 via presigned URL) |
+| `nim get -f <key>` | Download a file (direct from S3 via presigned URL) |
 | `nim del -f <file>` | Delete a file |
+| `nim rename --key <key> --name <new>` | Rename a file |
+| `nim mv --key <key> --to <folder>` | Move a file to a different folder |
+| `nim rdir <name>` | Delete a folder |
+| `nim rndir --name <name> --new <name>` | Rename a folder |
 
 ### Example Session
 
@@ -104,13 +113,11 @@ nim login
 nim mkbox my-project
 nim cb my-project
 nim cdir documents
-nim cd documents
-nim post -f resume.pdf
+nim post -f resume.pdf -d documents/resume.pdf
 nim ls
 # [dir]  documents/
 # [file] resume.pdf    145 KB
-nim pwd
-# my-project/documents
+nim rename --key users/.../resume.pdf --name cv.pdf
 nim logout
 ```
 
@@ -127,12 +134,14 @@ docker compose up -d
 
 # 2. Configure the server — create server/.env
 # PORT=8080
+# LOCAL_DEV=true
 # DB_DSN=postgresql://nimbus:nimbus@localhost:5432/nimbus
 # AWS_REGION=us-east-1
 # S3_BUCKET=nimbus-storage
 # S3_ENDPOINT=http://localhost:4566
 # S3_FORCE_PATH_STYLE=true
 # JWT_SECRET=your-secret-key
+# CORS_ORIGINS=http://localhost:3000
 
 # 3. Start the API server
 cd server && go run main.go
@@ -151,9 +160,9 @@ cd client && go build -o nim cli/main.go
 | CLI | Go + Cobra |
 | API Server | Go + Gin |
 | Database | PostgreSQL + GORM |
-| File Storage | AWS S3 / LocalStack |
+| File Storage | AWS S3 / LocalStack (presigned URLs) |
 | Session Cache | Redis |
-| Reverse Proxy | Nginx |
+| Load Balancer | AWS ALB + WAF (production) |
 | Local Dev | Docker Compose |
 
 ---
@@ -165,23 +174,20 @@ cd client && go build -o nim cli/main.go
 Done:
 
 - User registration and login with JWT
-- File upload, download, and delete
-- Folder creation and listing with nested path support
-- Box creation and deletion
+- File upload, download, delete, rename, and move
+- Presigned S3 URLs — file data never passes through the server
+- Folder creation, deletion, rename, listing, and zip download
+- Box creation, deletion, and listing
 - Full path navigation (`cd`, `pwd`, `ls`)
-- Nginx reverse proxy with rate limiting
-
-In progress:
-
-- Folder delete, move, and rename
-- Box listing command
+- Live progress bars and spinners on all CLI commands
+- Comprehensive server-side tests (handlers, auth, file ops, box ops)
+- ALB-ready server — trusted proxy headers, CORS config, HTTP timeouts
 
 Planned:
 
-- File move and rename
-- Pre-signed S3 URLs
 - File versioning
 - Sharing and collaboration
+- Cross-platform build scripts and releases
 
 ---
 
