@@ -47,6 +47,8 @@ var fileRenameCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
+		// Rename only updates the display name in the database; the S3 key stays
+		// the same so we don't need to copy/delete objects in S3.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/files/rename?box_name=%s&key=%s&new_name=%s",
 			url.QueryEscape(currentBox),

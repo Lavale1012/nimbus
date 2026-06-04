@@ -1,8 +1,11 @@
+// Package helpers provides small formatting and validation utilities used
+// across CLI commands.
 package helpers
 
 import "fmt"
 
-// FormatSize returns a human-readable file size string
+// FormatSize converts a raw byte count into a human-readable string with the
+// most appropriate unit (B, KB, MB, GB). Used in file and box listing output.
 func FormatSize(bytes int64) string {
 	const (
 		KB = 1024

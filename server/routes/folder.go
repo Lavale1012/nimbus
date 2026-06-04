@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// InitFolderRoutes registers the folder management endpoints under /v1/api.
 func InitFolderRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 	route := r.Group("v1/api")
 	{

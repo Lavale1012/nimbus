@@ -28,12 +28,17 @@ var logoutCmd = &cobra.Command{
 			fmt.Println("You are not logged in.")
 			return nil
 		}
+
+		// Ask for confirmation so the user doesn't accidentally log out.
 		fmt.Printf("Are you sure you want to logout? [Y/N]: ")
 		fmt.Scanln(&response)
 		if response != "Y" && response != "y" {
 			fmt.Println("Logout cancelled.")
 			return nil
 		}
+
+		// Deleting the Redis session key is all that's needed — the JWT itself
+		// will expire on the server side when its 24-hour TTL is up.
 		err = cache.ClearAuthToken(rdb)
 		if err != nil {
 			return fmt.Errorf("failed to clear session: %w", err)

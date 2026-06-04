@@ -1,3 +1,6 @@
+// Package helpers provides reusable business-logic utilities shared across
+// multiple handlers — box ownership checks, S3 key generation, and folder
+// path resolution.
 package helpers
 
 import (
@@ -12,7 +15,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// ValidateBoxOwnership validates box exists and belongs to user
+// ValidateBoxOwnership looks up a box by name and owner. It returns the Box
+// record so callers can use its ID without a second query, or an error if the
+// box doesn't exist or belongs to a different user.
 func ValidateBoxOwnership(db *gorm.DB, boxName string, userID uint) (*models.Box, error) {
 	var box models.Box
 	if err := db.Where("name = ? AND user_id = ?", boxName, userID).First(&box).Error; err != nil {
@@ -21,7 +26,13 @@ func ValidateBoxOwnership(db *gorm.DB, boxName string, userID uint) (*models.Box
 	return &box, nil
 }
 
-// GenerateS3Key generates a unique S3 key
+// GenerateS3Key builds the full S3 object key for a file being uploaded.
+// The format is:
+//
+//	users/nim-user-<userID>/boxes/<boxName><filePath>/<filename>_<unix_timestamp>
+//
+// The timestamp suffix prevents collisions when the same filename is uploaded
+// to the same path multiple times.
 func GenerateS3Key(filePath, filename, boxName string, user *models.User) (string, error) {
 	fullFilePathPrefix := fmt.Sprintf("users/nim-user-%d/boxes/%s", user.ID, boxName)
 	base := filepath.Base(filename)
@@ -34,7 +45,11 @@ func GenerateS3Key(filePath, filename, boxName string, user *models.User) (strin
 	return fullPath, nil
 }
 
-// AssociateFileWithFolder associates file with folder if provided
+// AssociateFileWithFolder reads an optional "folder_id" field from the
+// multipart form body and, if present, links the file to that folder in the
+// database. It silently returns if the field is missing or the folder doesn't
+// belong to the same box — this keeps the upload flow working even without a
+// folder target.
 func AssociateFileWithFolder(db *gorm.DB, c *gin.Context, fileModel *models.File, boxID uint) {
 	strFolderID := c.PostForm("folder_id")
 	if strFolderID == "" {
@@ -51,10 +66,7 @@ func AssociateFileWithFolder(db *gorm.DB, c *gin.Context, fileModel *models.File
 		return
 	}
 
-	// Only associate if folder belongs to the same box
-	// if folder.BoxID == boxID {
-	// 	db.Model(fileModel).Association("Folders").Append(&folder)
-	// }
+	// Only associate if the folder lives inside the same box as the file.
 	if folder.BoxID == boxID {
 		fid := uint(folderID)
 		fileModel.FolderID = &fid
@@ -62,7 +74,8 @@ func AssociateFileWithFolder(db *gorm.DB, c *gin.Context, fileModel *models.File
 	}
 }
 
-// GetBoxID returns the box ID for a given box name and user
+// GetBoxID is a convenience wrapper that returns the database primary key (ID)
+// of a box given its name and owner. Returns 0 if the box is not found.
 func GetBoxID(db *gorm.DB, boxName string, userID uint) uint {
 	var box models.Box
 	if err := db.Where("name = ? AND user_id = ?", boxName, userID).First(&box).Error; err != nil {
@@ -71,24 +84,29 @@ func GetBoxID(db *gorm.DB, boxName string, userID uint) uint {
 	return box.ID
 }
 
-// GetParentFolderID resolves a path to a folder ID
-// Returns nil if path is empty (root level), or the folder ID if path exists
+// GetParentFolderID resolves a slash-separated path string to the database ID
+// of the deepest folder in that path. It walks the folder tree one segment at
+// a time, always scoping to the correct box and parent.
+//
+// Returns nil when path is empty (meaning "the root of the box"), or nil if
+// any segment in the path doesn't exist.
+//
+// Example: path "documents/projects" walks:
+//  1. Find "documents" at root → get its ID
+//  2. Find "projects" whose parent is "documents" → return its ID
 func GetParentFolderID(db *gorm.DB, userID uint, boxName string, path string) *uint {
 	if path == "" || path == "/" {
 		return nil
 	}
 
-	// Get box ID first
 	boxID := GetBoxID(db, boxName, userID)
 	if boxID == 0 {
 		return nil
 	}
 
-	// Clean and split the path
 	path = strings.Trim(path, "/")
 	segments := strings.Split(path, "/")
 
-	// Traverse the folder hierarchy
 	var currentParentID *uint = nil
 
 	for _, segment := range segments {
@@ -102,7 +120,6 @@ func GetParentFolderID(db *gorm.DB, userID uint, boxName string, path string) *u
 		}
 
 		if err := query.First(&folder).Error; err != nil {
-			// Folder not found in path
 			return nil
 		}
 
@@ -111,35 +128,3 @@ func GetParentFolderID(db *gorm.DB, userID uint, boxName string, path string) *u
 
 	return currentParentID
 }
-
-// // reverseString reverses a string, handling Unicode correctly.
-// func ReverseString(s string) string {
-// 	runes := []rune(s) // Convert to runes for Unicode safety
-// 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-// 		runes[i], runes[j] = runes[j], runes[i] // Swap runes
-// 	}
-// 	return string(runes)
-// }
-
-// func TrimReverseUntil(s string, char rune) string {
-// 	// 1. Reverse the original string
-// 	reversedS := ReverseString(s)
-
-// 	// 2. Trim characters from the right (original left) until 'char' is found
-// 	// We need to find the index of 'char' in the reversed string
-// 	// and then slice up to that point.
-// 	// Using strings.IndexRune is efficient.
-// 	index := strings.IndexRune(reversedS, char)
-
-// 	// If the character is found, take the substring up to that character
-// 	if index != -1 {
-// 		reversedS = reversedS[:index] // Keep everything before the char
-// 	} else {
-// 		// If char not found, maybe return empty or original reversed (depends on requirement)
-// 		// Here, we'll return empty as we couldn't find the stop point.
-// 		return ""
-// 	}
-
-// 	// 3. Reverse the result back to original orientation
-// 	return ReverseString(reversedS)
-// }

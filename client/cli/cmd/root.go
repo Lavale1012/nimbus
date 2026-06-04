@@ -1,6 +1,6 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
+// Package cmd defines the Cobra command tree for the Nimbus CLI.
+// root.go sets up the top-level "nimbus" command; all sub-commands register
+// themselves via their own init() functions.
 package cmd
 
 import (
@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd is the base command — running "nim" with no sub-command shows help.
 var rootCmd = &cobra.Command{
 	Use:   "nimbus",
 	Short: "A cross-platform command-line interface for cloud file storage and management",
@@ -27,10 +27,9 @@ Current MVP commands:
 Visit https://github.com/your-org/nim-cli for more information.`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the RootCmd.
+// Execute is called by main.go. It runs the appropriate sub-command and exits
+// with a non-zero status code if anything goes wrong.
 func Execute() {
-
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
@@ -38,9 +37,6 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
+	// Persistent flags defined here are available to every sub-command.
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.nimbus.yaml)")
 }

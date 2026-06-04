@@ -17,11 +17,13 @@ import (
 	"golang.org/x/term"
 )
 
+// LoginRequest is the JSON body sent to /v1/api/auth/login.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
+// LoginResponse is the JSON body received from /v1/api/auth/login on success.
 type LoginResponse struct {
 	Message string           `json:"message"`
 	Token   string           `json:"token"`
@@ -37,12 +39,14 @@ var loginCmd = &cobra.Command{
 		var loginResponse LoginResponse
 		var loginRequest LoginRequest
 
+		// Connect to the local Redis session cache.
 		redisClient, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
 		defer redisClient.Close()
 
+		// If a session already exists the user is already logged in — no-op.
 		sessionExists, err := cache.SessionExists(redisClient)
 		if err != nil {
 			return fmt.Errorf("failed to check session existence: %w", err)
@@ -55,6 +59,7 @@ var loginCmd = &cobra.Command{
 		banner.ShowLoginBanner()
 		fmt.Print("\n")
 
+		// Prompt for email and validate format before sending to the server.
 		fmt.Print("Enter email: ")
 		fmt.Scanln(&loginRequest.Email)
 		if loginRequest.Email == "" {
@@ -64,6 +69,7 @@ var loginCmd = &cobra.Command{
 			return fmt.Errorf("invalid email format")
 		}
 
+		// term.ReadPassword reads the password without echoing it to the terminal.
 		fmt.Print("Enter password: ")
 		password, _ := term.ReadPassword(int(syscall.Stdin))
 		loginRequest.Password = string(password)
@@ -96,6 +102,7 @@ var loginCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
+		// Cache the session locally so subsequent commands don't need to re-authenticate.
 		if err := cache.SetAuthToken(redisClient, loginResponse.UserID, loginResponse.Email, loginResponse.Box, loginResponse.Token); err != nil {
 			return fmt.Errorf("failed to cache session: %w", err)
 		}

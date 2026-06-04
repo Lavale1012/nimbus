@@ -7,6 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// InitBoxRoutes registers the box management endpoints under /v1/api.
+// All three routes require a valid JWT (enforced inside each handler).
 func InitBoxRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 	route := r.Group("v1/api")
 	{

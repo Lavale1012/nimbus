@@ -42,6 +42,7 @@ var createBoxCmd = &cobra.Command{
 			return fmt.Errorf("no auth token found, please login first")
 		}
 
+		// box_name is passed as a query parameter; the server sanitizes it.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/boxes?box_name=%s",
 			url.QueryEscape(boxName),

@@ -1,3 +1,5 @@
+// Package routes wires HTTP verbs + paths to handler functions.
+// Each Init* function is called once at startup from server-init/server.go.
 package routes
 
 import (
@@ -7,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// InitUserRoutes registers the authentication endpoints under /v1/api/auth/.
 func InitUserRoutes(r *gin.Engine, db *gorm.DB, s3Client *s3.Client) {
 	route := r.Group("v1/api/auth/")
 	{

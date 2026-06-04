@@ -1,3 +1,4 @@
+// Package banner renders the ASCII art welcome screen shown before the login prompt.
 package banner
 
 import (
@@ -6,8 +7,8 @@ import (
 	"github.com/common-nighthawk/go-figure"
 )
 
-// term is the terminal font, smslant, speed
-
+// ShowLoginBanner prints a coloured ASCII art header to the terminal.
+// It uses the go-figure library which renders text using figlet fonts.
 func ShowLoginBanner() {
 	myFigure := figure.NewColorFigure("Welcome to Nimbus CLI!", "smslant", "blue", true)
 	Toplines := figure.NewColorFigure("===================================================================", "term", "cyan", true)

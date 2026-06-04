@@ -40,6 +40,7 @@ var deleteFolderCmd = &cobra.Command{
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
+		// Delete targets the folder at the current working path in the session.
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
 		jwtToken, err := cache.GetAuthToken(RDB)
@@ -47,6 +48,8 @@ var deleteFolderCmd = &cobra.Command{
 			return fmt.Errorf("no auth token found, please login first")
 		}
 
+		// The server deletes all S3 objects under the folder prefix and then
+		// recursively removes the folder and its contents from the database.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/folders?box_name=%s&path=%s&folder_name=%s",
 			url.QueryEscape(currentBox),

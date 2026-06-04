@@ -1,6 +1,5 @@
-/*
-Copyright © 2025 NAME HERE <lavale889@gmail.com>
-*/
+// main.go is the entry point for the Nimbus CLI.
+// It hands control to the Cobra command tree defined in the cmd package.
 package main
 
 import (
@@ -8,6 +7,5 @@ import (
 )
 
 func main() {
-
 	cmd.Execute()
 }

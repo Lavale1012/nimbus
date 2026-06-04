@@ -1,3 +1,5 @@
+// Package postgres handles connecting to PostgreSQL via GORM and keeping the
+// schema up to date with AutoMigrate.
 package postgres
 
 import (
@@ -10,6 +12,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// Connect reads DATABASE_URL from the environment, opens a GORM connection,
+// and automatically creates/updates all tables to match the current model
+// definitions. Returns the ready-to-use *gorm.DB handle.
 func Connect() (*gorm.DB, error) {
 	dsn, err := utils.GetEnv("DATABASE_URL")
 	if err != nil {
@@ -20,7 +25,9 @@ func Connect() (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Auto-migrate the schema
+	// AutoMigrate compares each model struct to the live schema and adds any
+	// missing columns or tables. It never drops columns, so it's safe to run
+	// on every startup.
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.Box{},

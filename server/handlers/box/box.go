@@ -1,3 +1,5 @@
+// Package box contains HTTP handlers for box (top-level storage container)
+// operations: create, delete, list, and verify.
 package box
 
 import (
@@ -22,6 +24,12 @@ const (
 	MIN_BOX_NAME = 1
 )
 
+// CreateBox creates a new box for the authenticated user. It:
+//  1. Authenticates the JWT
+//  2. Validates and sanitizes the box name (strips path traversal, replaces spaces)
+//  3. Checks for duplicate box names under the same user
+//  4. Creates a zero-byte "folder" object in S3 to represent the box prefix
+//  5. Saves the box record to the database
 func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
 	var existing models.Box
@@ -47,28 +55,29 @@ func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// Sanitize: strip path traversal and replace spaces
+	// filepath.Base removes any directory traversal (e.g. "../../etc") leaving
+	// only the final path component. Spaces become underscores for S3 key safety.
 	sanitizedName := filepath.Base(boxName)
 	sanitizedName = strings.ReplaceAll(sanitizedName, " ", "_")
 
-	// Check for duplicate box name under this user
 	if err := db.Where("name = ? AND user_id = ?", sanitizedName, user.ID).First(&existing).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "a box with that name already exists"})
 		return
 	}
 
-	// Generate a secure unique BoxID
 	boxID, err := utils.GenerateSecureID()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate box ID"})
 		return
 	}
 
+	// S3 key for the box "folder" — trailing slash marks it as a directory prefix.
 	key := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, sanitizedName)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
 
+	// Write a zero-byte object so the box prefix is visible in the S3 console.
 	_, err = h.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &h.Bucket,
 		Key:    &key,
@@ -91,6 +100,10 @@ func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusCreated, gin.H{"message": "box created successfully", "box": sanitizedName})
 }
 
+// DeleteBox removes a box and its S3 prefix object from both storage and the
+// database. Note: this only deletes the top-level placeholder key — individual
+// files inside the box must be deleted separately (or via a cascade when the
+// database record is removed).
 func DeleteBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
 	var box models.Box
@@ -135,6 +148,8 @@ func DeleteBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "box deleted successfully"})
 }
+
+// ListBoxes returns all boxes owned by the authenticated user.
 func ListBoxes(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
 	var boxes []models.Box
@@ -152,6 +167,8 @@ func ListBoxes(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusOK, gin.H{"boxes": boxes})
 }
 
+// VerifyBoxExist checks whether a named box exists for the authenticated user.
+// Used by the CLI's "cb" command to validate a box name before setting it as active.
 func VerifyBoxExist(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
 	var box models.Box

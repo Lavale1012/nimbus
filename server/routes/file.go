@@ -7,6 +7,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// InitFileRoutes registers the file operation endpoints under /v1/api.
+// The presign endpoints return short-lived S3 URLs; the CLI then talks
+// directly to S3 for the actual data transfer (no bytes flow through this server).
 func InitFileRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 	route := r.Group("v1/api")
 	{

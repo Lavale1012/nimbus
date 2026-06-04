@@ -23,6 +23,9 @@ var (
 	filePathFlag    string
 )
 
+// presignUploadResponse is the JSON returned by POST /v1/api/files/presign-upload.
+// UploadURL is a short-lived S3 presigned PUT URL the CLI uses to stream the
+// file directly to S3 — the bytes never pass through this server.
 type presignUploadResponse struct {
 	UploadURL string `json:"upload_url"`
 	S3Key     string `json:"s3_key"`
@@ -73,7 +76,8 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		}
 		filename := filepath.Base(filePathFlag)
 
-		// Step 1: request a presigned PUT URL from the server
+		// Step 1: Ask the server for a short-lived presigned PUT URL.
+		// The server creates the file metadata record in the DB at this point.
 		presignEndpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream&size=%d",
 			url.QueryEscape(currentBox),
@@ -92,8 +96,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		presignReq.Header.Set("Authorization", "Bearer "+jwtToken)
 
 		stop := animations.Spinner("Requesting upload URL...")
-		client := &http.Client{Timeout: 15 * time.Second}
-		presignResp, err := client.Do(presignReq)
+		presignResp, err := (&http.Client{Timeout: 15 * time.Second}).Do(presignReq)
 		stop()
 
 		if err != nil {
@@ -111,7 +114,8 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 			return fmt.Errorf("failed to parse presign response: %w", err)
 		}
 
-		// Step 2: PUT the file directly to S3 with a live progress bar
+		// Step 2: PUT the file directly to S3 using the presigned URL.
+		// A ProgressReader wraps the file data so we can show a live byte counter.
 		fileData, err := io.ReadAll(f)
 		if err != nil {
 			return fmt.Errorf("error reading file: %w", err)

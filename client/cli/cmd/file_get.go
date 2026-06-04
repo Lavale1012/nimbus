@@ -20,6 +20,9 @@ import (
 var keyFlag string
 var outputFileFlag string
 
+// presignDownloadResponse is the JSON returned by GET /v1/api/files/presign-download.
+// DownloadURL is a short-lived S3 presigned GET URL the CLI uses to stream
+// the file directly from S3.
 type presignDownloadResponse struct {
 	DownloadURL string `json:"download_url"`
 }
@@ -42,6 +45,7 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
+		// Default the output filename to the last segment of the S3 key.
 		if outputFileFlag == "" {
 			outputFileFlag = filepath.Base(keyFlag)
 		}
@@ -56,7 +60,7 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
-		// Step 1: request a presigned GET URL from the server
+		// Step 1: Ask the server for a short-lived presigned GET URL.
 		presignEndpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/files/presign-download?box_name=%s&key=%s",
 			url.QueryEscape(currentBox),
@@ -73,8 +77,7 @@ var GetFileCmd = &cobra.Command{
 		presignReq.Header.Set("Authorization", "Bearer "+jwtToken)
 
 		stop := animations.Spinner("Requesting download URL...")
-		client := &http.Client{Timeout: 15 * time.Second}
-		presignResp, err := client.Do(presignReq)
+		presignResp, err := (&http.Client{Timeout: 15 * time.Second}).Do(presignReq)
 		stop()
 
 		if err != nil {
@@ -92,7 +95,8 @@ var GetFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse presign response: %w", err)
 		}
 
-		// Step 2: GET the file directly from S3 with a live progress bar
+		// Step 2: GET the file directly from S3 and write it to disk.
+		// A ProgressWriter wraps the output file so we can show a live byte counter.
 		downloadCtx, downloadCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer downloadCancel()
 

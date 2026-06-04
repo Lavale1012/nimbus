@@ -11,11 +11,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// BoxEntry is one item in the list-boxes response from the server.
 type BoxEntry struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
 }
 
+// ListBoxesResponse is the full JSON response from GET /v1/api/boxes.
 type ListBoxesResponse struct {
 	Boxes []BoxEntry `json:"boxes"`
 }
@@ -54,8 +56,7 @@ var ListBoxesCmd = &cobra.Command{
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
+		resp, err := (&http.Client{}).Do(req)
 		if err != nil {
 			return fmt.Errorf("error listing boxes: %w", err)
 		}
@@ -75,6 +76,8 @@ var ListBoxesCmd = &cobra.Command{
 			fmt.Println("No boxes found.")
 			return nil
 		}
+
+		// Pretty-print the box list as a two-column table.
 		fmt.Print("\n")
 		fmt.Printf("%-30s  %s\n", "NAME", "SIZE")
 		fmt.Printf("%-30s  %s\n", "----", "----")
@@ -86,6 +89,7 @@ var ListBoxesCmd = &cobra.Command{
 	},
 }
 
+// formatSize converts bytes to a human-readable string for the table output.
 func formatSize(bytes int64) string {
 	switch {
 	case bytes >= 1<<30:

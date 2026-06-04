@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ListResponse is the JSON returned by GET /v1/api/folders.
+// It describes the contents (files + sub-folders) of a single directory.
 type ListResponse struct {
 	FolderID   *uint         `json:"folder_id"`
 	FolderName string        `json:"folder_name"`
@@ -24,6 +26,7 @@ type ListResponse struct {
 	Folders    []FolderEntry `json:"folders"`
 }
 
+// FileEntry is a single file item in a ListResponse.
 type FileEntry struct {
 	ID        uint   `json:"id"`
 	Name      string `json:"name"`
@@ -32,13 +35,17 @@ type FileEntry struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// FolderEntry is a single folder item in a ListResponse.
 type FolderEntry struct {
 	ID        uint   `json:"id"`
 	Name      string `json:"name"`
 	CreatedAt string `json:"created_at"`
 }
 
-// cdCmd represents the cd command - change current path
+// cdCmd changes the working directory within the active box. The new path is
+// saved in Redis so every subsequent command uses it without re-specifying it.
+// Supports "cd .." (go up one level), absolute paths ("/some/path"), and
+// relative paths ("sub-folder").
 var cdCmd = &cobra.Command{
 	Use:   "cd [path]",
 	Short: "Change current directory path",
@@ -49,14 +56,13 @@ nim cd myfolder     # Go to myfolder (relative)
 nim cd /some/path   # Go to absolute path
 nim cd ..           # Go up one level`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 1. Connect to Redis
 		RDB, err := cache.NewRedisClient()
 		var newPath string
 
 		if err != nil {
 			return fmt.Errorf("Cache error: %w", err)
 		}
-		// 2. Check if logged in
+
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
@@ -65,7 +71,7 @@ nim cd ..           # Go up one level`,
 			fmt.Println("You are not logged in.")
 			return nil
 		}
-		// 3. Check if box is set
+
 		CurrentBox, err := cache.GetBoxName(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to get current box from cache: %w", err)
@@ -74,25 +80,22 @@ nim cd ..           # Go up one level`,
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		// 4. Get current path from cache (empty string means root)
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
-		// 5. Calculate new path (handle .., relative, absolute)
+		// Resolve the new path from the argument.
 		if len(args) == 0 {
-			// nim cd → go to root
+			// "nim cd" with no arguments goes to the box root.
 			newPath = ""
 		} else {
 			targetPath := args[0]
 			if strings.HasPrefix(targetPath, "/") {
-				// Absolute path - use as-is (strip leading slash for storage)
+				// Absolute path: strip the leading slash and use as-is.
 				newPath = strings.TrimPrefix(targetPath, "/")
 			} else if targetPath == ".." {
-				// Go up one level
+				// Go up one level by removing the last path segment.
 				if currentPath == "" {
-					// Already at root, stay at root
-					newPath = ""
+					newPath = "" // already at root
 				} else {
-					// Remove last path segment
 					lastSlash := strings.LastIndex(currentPath, "/")
 					if lastSlash == -1 {
 						newPath = ""
@@ -101,19 +104,19 @@ nim cd ..           # Go up one level`,
 					}
 				}
 			} else if strings.Contains(targetPath, "..") {
-				// Handle paths with .. in them (e.g., ../sibling, foo/../bar)
+				// Handle paths like "../sibling" or "foo/../bar" by joining with
+				// the current path and letting path.Clean resolve the ".." segments.
 				combined := path.Join(currentPath, targetPath)
 				newPath = path.Clean(combined)
-				// path.Clean may return "." for empty, convert to ""
 				if newPath == "." {
 					newPath = ""
 				}
-				// Prevent escaping root (path.Clean handles this but double-check)
+				// Guard against escaping the box root (e.g. "../../../../etc").
 				if strings.HasPrefix(newPath, "..") {
 					newPath = ""
 				}
 			} else {
-				// Relative path - append to current
+				// Relative path: append to current.
 				if currentPath == "" {
 					newPath = targetPath
 				} else {
@@ -122,18 +125,16 @@ nim cd ..           # Go up one level`,
 			}
 		}
 
-		// Clean up any double slashes or trailing slashes
+		// Normalise: trim leading/trailing slashes and collapse any double slashes.
 		newPath = strings.Trim(newPath, "/")
 		for strings.Contains(newPath, "//") {
 			newPath = strings.ReplaceAll(newPath, "//", "/")
 		}
 
-		// 6. Save new path to cache
 		if err := cache.SetCurrentPath(RDB, newPath); err != nil {
 			return fmt.Errorf("failed to save path: %w", err)
 		}
 
-		// Display the new path
 		if newPath == "" {
 			fmt.Printf("%s/\n", CurrentBox)
 		} else {
@@ -144,20 +145,19 @@ nim cd ..           # Go up one level`,
 	},
 }
 
-// pwdCmd represents the pwd command - print working directory
+// pwdCmd prints the current working directory (box name + path) so the user
+// always knows where they are without running a full "ls".
 var pwdCmd = &cobra.Command{
 	Use:   "pwd",
 	Short: "Print current directory path",
 	Long:  `Display the current working directory path within your box.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 1. Connect to Redis
-
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("Cache error: %w", err)
 		}
-		// 2. Check if logged in
+
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
@@ -166,7 +166,7 @@ var pwdCmd = &cobra.Command{
 			fmt.Println("You are not logged in.")
 			return nil
 		}
-		// 3. Check if box is set
+
 		CurrentBox, err := cache.GetBoxName(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to get current box from cache: %w", err)
@@ -175,10 +175,8 @@ var pwdCmd = &cobra.Command{
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		// 4. Get current path from cache
 		CurrentPath, _ := cache.GetCurrentPath(RDB)
 
-		// 5. Print: box_name:/current/path
 		if CurrentPath == "" {
 			fmt.Printf("%s/\n", CurrentBox)
 		} else {
@@ -189,7 +187,9 @@ var pwdCmd = &cobra.Command{
 	},
 }
 
-// lsCmd represents the ls command - list directory contents
+// lsCmd lists the contents of the current or a specified directory by querying
+// the server. It is the path-aware version of fileListCmd — it resolves the
+// target path from the session's current path combined with an optional argument.
 var lsCmd = &cobra.Command{
 	Use:   "ls [path]",
 	Short: "List contents of current or specified directory",
@@ -199,14 +199,12 @@ var lsCmd = &cobra.Command{
 nim ls myfolder     # List contents of myfolder
 nim ls /some/path   # List contents of absolute path`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 1. Connect to Redis
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("Cache error: %w", err)
 		}
 		defer RDB.Close()
 
-		// 2. Check if logged in
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to check login status: %w", err)
@@ -215,7 +213,6 @@ nim ls /some/path   # List contents of absolute path`,
 			return fmt.Errorf("you are not logged in, please login first")
 		}
 
-		// 3. Check if box is set
 		CurrentBox, err := cache.GetBoxName(RDB)
 		if err != nil {
 			return fmt.Errorf("failed to get current box from cache: %w", err)
@@ -224,10 +221,10 @@ nim ls /some/path   # List contents of absolute path`,
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
-		// 4. Get current path from cache
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
-		// 5. Determine target path (current or arg)
+		// Determine the target path: either the session's current path, or an
+		// argument (absolute overrides, relative is appended to current).
 		targetPath := currentPath
 		if len(args) > 0 {
 			arg := args[0]
@@ -243,7 +240,6 @@ nim ls /some/path   # List contents of absolute path`,
 		}
 		targetPath = strings.Trim(targetPath, "/")
 
-		// 6. Query server for directory listing
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/folders?box_name=%s&path=%s",
 			url.QueryEscape(CurrentBox),
@@ -264,8 +260,7 @@ nim ls /some/path   # List contents of absolute path`,
 		}
 		req.Header.Set("Authorization", "Bearer "+jwtToken)
 
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
+		resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 		if err != nil {
 			return fmt.Errorf("error fetching directory listing: %w", err)
 		}
@@ -285,7 +280,7 @@ nim ls /some/path   # List contents of absolute path`,
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		// 7. Display results
+		// Print the path header then folders before files (matching Unix ls convention).
 		displayPath := CurrentBox + listing.Path
 		fmt.Printf("%s\n\n", displayPath)
 

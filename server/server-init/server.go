@@ -1,3 +1,5 @@
+// Package server handles startup, configuration, and graceful shutdown of the
+// Nimbus API. InitServer is the single entry point called from main.
 package server
 
 import (
@@ -22,15 +24,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// S3 and DB are package-level singletons shared across all request handlers.
 var S3 *s3.Client
 var DB *gorm.DB
 
+// InitServer bootstraps the entire API:
+//  1. Reads required environment variables
+//  2. Creates the Gin router with logging, recovery, and CORS middleware
+//  3. Connects to S3 and PostgreSQL
+//  4. Registers all route groups
+//  5. Starts the HTTP server in a background goroutine
+//  6. Waits for SIGINT/SIGTERM, then shuts down cleanly within 10 seconds
 func InitServer() error {
 	bucket, err := utils.GetEnv("S3_BUCKET")
 	if err != nil {
 		return err
 	}
 
+	// gin.New() gives us a blank router — we add Logger and Recovery manually
+	// so we keep full control over middleware order.
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
@@ -44,6 +56,8 @@ func InitServer() error {
 		r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
 	}
 
+	// CORS: allow all origins by default; restrict to a comma-separated list
+	// when CORS_ORIGINS is set (e.g. "https://app.example.com").
 	corsOrigins, _ := utils.GetEnv("CORS_ORIGINS")
 	origins := []string{"*"}
 	if corsOrigins != "" {
@@ -65,6 +79,7 @@ func InitServer() error {
 		return err
 	}
 
+	// Connect to S3 (or LocalStack when S3_ENDPOINT is set in the env).
 	s3Client, err := s3db.Connect(ctx, region)
 	if err != nil {
 		return err
@@ -75,11 +90,14 @@ func InitServer() error {
 		return fmt.Errorf("failed to connect to S3")
 	}
 
+	// Bundle the S3 client + bucket name into a single config struct that
+	// every handler receives so they never read global state directly.
 	config := s3db.Config{
 		Client: S3,
 		Bucket: bucket,
 	}
 
+	// Connect to PostgreSQL and auto-migrate all models.
 	DB, err = postgres.Connect()
 	if err != nil {
 		return err
@@ -88,34 +106,41 @@ func InitServer() error {
 		return fmt.Errorf("failed to connect to PostgreSQL")
 	}
 
+	// Register all route groups (files, boxes, folders, users).
 	routes.InitFileRoutes(r, config, DB)
 	routes.InitBoxRoutes(r, config, DB)
 	routes.InitFolderRoutes(r, config, DB)
 	routes.InitUserRoutes(r, DB, S3)
 
+	// /health is a simple liveness probe used by the ALB and docker-compose healthcheck.
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// Configure HTTP server timeouts.
+	// WriteTimeout is generous (300s) to accommodate large file presign operations.
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 300 * time.Second, // presign + large file ops
+		WriteTimeout: 300 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Start the server in a goroutine so we can block on the signal channel below.
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
 
+	// Block until we receive SIGINT (Ctrl-C) or SIGTERM (Docker/ECS stop).
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
 
+	// Give in-flight requests up to 10 seconds to finish before we close.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -123,6 +148,7 @@ func InitServer() error {
 		log.Printf("Server forced to shutdown: %v", err)
 	}
 
+	// Close the database connection pool cleanly.
 	if sqlDB, err := DB.DB(); err == nil {
 		sqlDB.Close()
 	}

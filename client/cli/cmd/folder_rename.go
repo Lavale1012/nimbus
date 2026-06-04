@@ -41,6 +41,7 @@ var renameFolderCmd = &cobra.Command{
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
+		// The rename happens relative to the current working path in the session.
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
 		jwtToken, err := cache.GetAuthToken(RDB)
@@ -48,6 +49,8 @@ var renameFolderCmd = &cobra.Command{
 			return fmt.Errorf("no auth token found, please login first")
 		}
 
+		// The server copies all S3 objects to the new prefix, then deletes the
+		// old prefix, and finally updates the folder name in the database.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/folders/rename?box_name=%s&path=%s&folder_name=%s&new_name=%s",
 			url.QueryEscape(currentBox),

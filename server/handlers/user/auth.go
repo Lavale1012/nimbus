@@ -1,3 +1,4 @@
+// Package user contains HTTP handlers for user registration and login.
 package user
 
 import (
@@ -15,6 +16,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// Input length limits. MAX_PASSWORD_LENGTH is 72 because bcrypt silently
+// truncates passwords longer than 72 bytes — we reject them upfront so users
+// aren't surprised when a 73-character password works as a 72-character one.
 const (
 	MAX_EMAIL_LENGTH    = 254
 	MAX_PASSWORD_LENGTH = 72
@@ -22,11 +26,16 @@ const (
 	PASSKEY_LENGTH      = 4
 )
 
+// LoginRequest is the JSON body expected by the /login endpoint.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
+// isValidPassword checks that the password meets complexity requirements:
+// minimum length, at least one number, one uppercase, one lowercase, and one
+// special character. Returns individual booleans so the caller can form a
+// specific error message.
 func isValidPassword(s string) (minLength, number, upper, lower, special bool) {
 	var hasNumber, hasUpper, hasLower, hasSpecial bool
 
@@ -51,14 +60,20 @@ func isValidPassword(s string) (minLength, number, upper, lower, special bool) {
 	return
 }
 
+// isEmailValid uses a regex to check basic email format.
 func isEmailValid(e string) bool {
 	emailRegex := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 	return emailRegex.MatchString(e)
 }
+
+// Login validates credentials and returns a signed JWT on success.
+// If the email doesn't exist we still run bcrypt on a dummy hash so the
+// response time is the same as a real password mismatch — this prevents an
+// attacker from enumerating valid emails via timing differences.
 func Login(c *gin.Context, db *gorm.DB) {
 	var user models.User
-
 	var loginRequest LoginRequest
+
 	if err := c.ShouldBindJSON(&loginRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
@@ -84,12 +99,13 @@ func Login(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	//Query user by email and preload their boxes
+	// Query user and preload their boxes in one DB round-trip.
 	err := db.Preload("Boxes").Where("email = ?", loginRequest.Email).First(&user).Error
 	var isValid bool
 
 	if err != nil {
-		// User not found - do dummy hash check to maintain constant time
+		// User not found — run a dummy bcrypt check so this branch takes the
+		// same time as a real failed login, preventing email enumeration.
 		dummyHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 		utils.VerifyPasswordHash(loginRequest.Password, dummyHash)
 		isValid = false
@@ -103,7 +119,7 @@ func Login(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// Generate JWT token
+	// Issue a JWT containing the user's email and ID.
 	token, err := jwt.CreateToken(user.Email, fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
@@ -112,29 +128,30 @@ func Login(c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusOK, gin.H{"message": "Login successful", "token": token, "user_id": user.ID, "email": user.Email, "box": user.Boxes})
 }
 
+// Register creates a new user account. The registration flow is:
+//  1. Validate and sanitize all input fields
+//  2. Check for duplicate email
+//  3. Hash the password and passkey with bcrypt
+//  4. Generate a random 8-digit user ID (retrying on the rare collision)
+//  5. Create the user record along with their default "Home-Box"
 func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
-
 	var user models.User
 
-	// Step 1: Bind JSON from request
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	// Step 2: Validate required fields
 	if user.Email == "" || user.Password == "" || user.PassKey == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Email, password, and passkey are required"})
 		return
 	}
 
-	// Step 3: Validate email format
 	if !isEmailValid(user.Email) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
 		return
 	}
 
-	// Step 4: Validate input length constraints (before hashing)
 	if len(user.Email) > MAX_EMAIL_LENGTH {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Email exceeds maximum allowed length"})
 		return
@@ -155,7 +172,7 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		return
 	}
 
-	// Step 5: Validate password strength (on plain text)
+	// Validate password complexity before hashing.
 	minLength, number, upper, lower, special := isValidPassword(user.Password)
 	if !minLength || !number || !upper || !lower || !special {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -164,14 +181,13 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		return
 	}
 
-	// Step 6: Check if email already exists
+	// Reject duplicate emails before doing any expensive work.
 	var existingUser models.User
 	if err := db.Where("email = ?", user.Email).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
 		return
 	}
 
-	// Step 7: Hash password
 	hashedPassword, err := utils.PasswordHash(user.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process registration"})
@@ -179,7 +195,6 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 	user.Password = hashedPassword
 
-	// Step 8: Hash passkey (should also be hashed for security)
 	hashedPassKey, err := utils.PasswordHash(user.PassKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process registration"})
@@ -187,21 +202,19 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 	user.PassKey = hashedPassKey
 
-	// Step 9: Generate random user ID (7-8 digits)
+	// Generate a random 8-digit user ID. Loop in case we collide with an
+	// existing ID (extremely unlikely but theoretically possible).
 	userID, err := utils.GenerateUserID()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process registration"})
 		return
 	}
 
-	// Check for ID collision (very rare but possible)
 	var existingUserByID models.User
 	for {
 		if err := db.First(&existingUserByID, userID).Error; err != nil {
-			// ID doesn't exist, we can use it
-			break
+			break // ID is free to use
 		}
-		// ID collision, generate a new one
 		userID, err = utils.GenerateUserID()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process registration"})
@@ -210,32 +223,30 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 	}
 	user.ID = userID
 
-	// Step 10: Generate secure BoxID for home box
+	// Generate a secure random BoxID for the default "Home-Box".
 	boxID, err := utils.GenerateSecureID()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process registration"})
 		return
 	}
 
-	// Step 11: Create user with home box
+	// Create the user and their Home-Box in a single DB transaction (GORM handles this via association).
 	user.Boxes = []models.Box{{
 		Name:  "Home-Box",
 		BoxID: boxID,
 	}}
 
-	// Step 12: Create user in database with the generated ID
 	if err := db.Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
 
-	// Update user with bucket name
 	if err := db.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user bucket"})
 		return
 	}
 
-	// Step 13: Return success (without exposing sensitive IDs)
+	// Return only non-sensitive fields in the response.
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "User registered successfully",
 		"email":   user.Email,

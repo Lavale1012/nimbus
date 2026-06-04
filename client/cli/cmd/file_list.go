@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// lsResponse is the JSON returned by GET /v1/api/folders.
 type lsResponse struct {
 	FolderName string        `json:"folder_name"`
 	Path       string        `json:"path"`
@@ -53,6 +54,8 @@ var fileListCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
+		// Build the endpoint. The optional --path flag narrows the listing to a
+		// specific folder; omitting it returns the box root.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/folders?box_name=%s",
 			url.QueryEscape(currentBox),

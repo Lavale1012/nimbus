@@ -52,6 +52,8 @@ nim cdir my-folder path/to/parent`,
 			return fmt.Errorf("no current box set, please set it using 'nim cb [box-name]'")
 		}
 
+		// Use the cached current path as the parent for the new folder, unless
+		// an explicit destination was given as a second argument.
 		currentPath, _ := cache.GetCurrentPath(RDB)
 
 		jwtToken, err := cache.GetAuthToken(RDB)

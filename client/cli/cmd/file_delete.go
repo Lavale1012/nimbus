@@ -38,6 +38,8 @@ var deleteFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
+		// The S3 key is appended directly to the URL path; the server reads it
+		// via c.Param("name").
 		endpoint := config.BaseURL + "/v1/api/files/" + deleteFilePathFlag
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

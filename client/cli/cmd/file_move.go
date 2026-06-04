@@ -46,6 +46,8 @@ var fileMoveCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
+		// Move updates the FolderID foreign key in the database.
+		// The S3 key (and therefore the actual object location) does not change.
 		endpoint := fmt.Sprintf(
 			config.BaseURL+"/v1/api/files/move?box_name=%s&key=%s&target_path=%s",
 			url.QueryEscape(currentBox),
