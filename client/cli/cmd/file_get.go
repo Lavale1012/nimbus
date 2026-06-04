@@ -13,6 +13,7 @@ import (
 
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +58,7 @@ var GetFileCmd = &cobra.Command{
 
 		// Step 1: request a presigned GET URL from the server
 		presignEndpoint := fmt.Sprintf(
-			"http://localhost:8080/v1/api/files/presign-download?box_name=%s&key=%s",
+			config.BaseURL+"/v1/api/files/presign-download?box_name=%s&key=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(keyFlag),
 		)

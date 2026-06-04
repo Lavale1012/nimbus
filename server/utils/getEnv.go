@@ -8,13 +8,16 @@ import (
 )
 
 func GetEnv(key string) (string, error) {
-	// Try to load a .env file (optional — env vars may already be set by the OS/container)
-	possiblePaths := []string{
+	env := os.Getenv("NIM_ENV")
+	candidates := []string{
+		".env." + env,
 		".env",
+		"../.env." + env,
 		"../.env",
+		"../../.env." + env,
 		"../../.env",
 	}
-	for _, path := range possiblePaths {
+	for _, path := range candidates {
 		if godotenv.Load(path) == nil {
 			break
 		}

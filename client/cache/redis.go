@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/nimbus/cli/config"
 	"github.com/redis/go-redis/v9"
 )
 
 func NewRedisClient() (*redis.Client, error) {
 	ctx := context.Background()
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // Adjust as needed
+		Addr:     config.RedisAddr,
 		Password: "",               // No password set
 		DB:       0,                // Use default DB
 	})

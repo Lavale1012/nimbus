@@ -9,6 +9,7 @@ import (
 
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,7 @@ var deleteFileCmd = &cobra.Command{
 			return fmt.Errorf("failed to get auth token: %w", err)
 		}
 
-		endpoint := "http://localhost:8080/v1/api/files/" + deleteFilePathFlag
+		endpoint := config.BaseURL + "/v1/api/files/" + deleteFilePathFlag
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

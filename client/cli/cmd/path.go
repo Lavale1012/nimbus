@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nimbus/cli/cache"
+	"github.com/nimbus/cli/config"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/spf13/cobra"
 )
@@ -244,7 +245,7 @@ nim ls /some/path   # List contents of absolute path`,
 
 		// 6. Query server for directory listing
 		endpoint := fmt.Sprintf(
-			"http://localhost:8080/v1/api/folders?box_name=%s&path=%s",
+			config.BaseURL+"/v1/api/folders?box_name=%s&path=%s",
 			url.QueryEscape(CurrentBox),
 			url.QueryEscape(targetPath),
 		)

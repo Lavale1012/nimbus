@@ -11,6 +11,7 @@ import (
 
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +60,7 @@ nim cdir my-folder path/to/parent`,
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://localhost:8080/v1/api/folders?box_name=%s&path=%s&folder_name=%s",
+			config.BaseURL+"/v1/api/folders?box_name=%s&path=%s&folder_name=%s",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(currentPath),
 			url.QueryEscape(folderNameFlag),

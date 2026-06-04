@@ -27,6 +27,7 @@ nim
 # Environment files
 .env
 .env.local
+.env.prod
 .env.production
 
 # IDE files

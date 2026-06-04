@@ -14,6 +14,7 @@ import (
 
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +75,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 
 		// Step 1: request a presigned PUT URL from the server
 		presignEndpoint := fmt.Sprintf(
-			"http://localhost:8080/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream&size=%d",
+			config.BaseURL+"/v1/api/files/presign-upload?box_name=%s&filePath=%s&filename=%s&content_type=application/octet-stream&size=%d",
 			url.QueryEscape(currentBox),
 			url.QueryEscape(destinationFlag),
 			url.QueryEscape(filename),

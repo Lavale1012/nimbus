@@ -10,6 +10,7 @@ import (
 
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +45,7 @@ var deleteBoxCmd = &cobra.Command{
 		}
 
 		endpoint := fmt.Sprintf(
-			"http://localhost:8080/v1/api/boxes?box_name=%s",
+			config.BaseURL+"/v1/api/boxes?box_name=%s",
 			url.QueryEscape(deleteBoxNameFlag),
 		)
 

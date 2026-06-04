@@ -11,6 +11,7 @@ import (
 	"github.com/nimbus/cli/banner"
 	"github.com/nimbus/cli/cache"
 	"github.com/nimbus/cli/cli/animations"
+	"github.com/nimbus/cli/config"
 	"github.com/nimbus/cli/utils/helpers"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -72,7 +73,7 @@ var loginCmd = &cobra.Command{
 		}
 
 		body, _ := json.Marshal(loginRequest)
-		req, err := http.NewRequest(http.MethodPost, "http://localhost:8080/v1/api/auth/login", bytes.NewBuffer(body))
+		req, err := http.NewRequest(http.MethodPost, config.BaseURL+"/v1/api/auth/login", bytes.NewBuffer(body))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
