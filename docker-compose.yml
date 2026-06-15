@@ -5,15 +5,15 @@ services:
     image: postgres:15
     container_name: nimbus-postgres
     environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: cloudsuitedb
+      POSTGRES_USER: nimbus
+      POSTGRES_PASSWORD: nimbus
+      POSTGRES_DB: nimbus
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d cloudsuitedb"]
+      test: ["CMD-SHELL", "pg_isready -U nimbus -d nimbus"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,7 +45,7 @@ services:
     environment:
       PORT: 8080
       LOCAL_DEV: true
-      DATABASE_URL: "host=postgres user=${DB_USERNAME} password=${DB_PASSWORD} dbname=cloudsuitedb port=5432 sslmode=disable"
+      DATABASE_URL: "host=postgres user=nimbus password=nimbus dbname=nimbus port=5432 sslmode=disable"
       AWS_REGION: us-east-1
       S3_BUCKET: nimbus-cli-storage
       S3_ENDPOINT: http://localstack:4566

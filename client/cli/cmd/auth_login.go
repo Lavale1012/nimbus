@@ -17,7 +17,7 @@ import (
 	"golang.org/x/term"
 )
 
-// LoginRequest is the JSON body sent to /v1/api/auth/login.
+// LoginRequest is the JSON body sent to /v1/api/auth/users/login.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -79,7 +79,7 @@ var loginCmd = &cobra.Command{
 		}
 
 		body, _ := json.Marshal(loginRequest)
-		req, err := http.NewRequest(http.MethodPost, config.BaseURL+"/v1/api/auth/login", bytes.NewBuffer(body))
+		req, err := http.NewRequest(http.MethodPost, config.BaseURL+"/v1/api/auth/users/login", bytes.NewBuffer(body))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}

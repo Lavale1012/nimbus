@@ -188,8 +188,8 @@ var pwdCmd = &cobra.Command{
 }
 
 // lsCmd lists the contents of the current or a specified directory by querying
-// the server. It is the path-aware version of fileListCmd — it resolves the
-// target path from the session's current path combined with an optional argument.
+// the server. It resolves the target path from the session's current path
+// combined with an optional argument, matching standard Unix ls behaviour.
 var lsCmd = &cobra.Command{
 	Use:   "ls [path]",
 	Short: "List contents of current or specified directory",

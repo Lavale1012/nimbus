@@ -51,14 +51,19 @@ func PresignDownload(d s3db.Config, c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	s3Key := fmt.Sprintf("users/nim-user-%v/boxes/%s/%s", user.ID, box.Name, key)
-
+	// key may be a bare filename (e.g. "notes.txt") or a full S3 key. Try an
+	// exact s3_key match first; if that misses, fall back to looking up by name
+	// within the box so users don't need to know the timestamp-suffixed key.
 	var fileModel models.File
-	if err := db.Where("s3_key = ? AND user_id = ?", s3Key, user.ID).First(&fileModel).Error; err != nil {
-		log.Printf("[PRESIGN-DOWNLOAD] File not found - user_id: %d, key: %s", user.ID, s3Key)
-		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-		return
+	err = db.Where("s3_key = ? AND user_id = ?", key, user.ID).First(&fileModel).Error
+	if err != nil {
+		if err := db.Where("name = ? AND box_id = ? AND user_id = ?", key, box.ID, user.ID).First(&fileModel).Error; err != nil {
+			log.Printf("[PRESIGN-DOWNLOAD] File not found - user_id: %d, key: %s", user.ID, key)
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
 	}
+	s3Key := fileModel.S3Key
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()

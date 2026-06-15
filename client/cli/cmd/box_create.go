@@ -71,6 +71,11 @@ var createBoxCmd = &cobra.Command{
 			return fmt.Errorf("failed to create box: %s — %s", resp.Status, string(errBody))
 		}
 
+		// Add the new box to the local cache so "nim cb <box>" works immediately.
+		if err := cache.AddBoxToCache(RDB, boxName); err != nil {
+			return fmt.Errorf("box created but failed to update local cache: %w", err)
+		}
+
 		fmt.Printf("Box \"%s\" created successfully\n", boxName)
 		return nil
 	},

@@ -134,6 +134,30 @@ func StoreBoxes(rdb *redis.Client, boxes []map[string]any) error {
 	return rdb.HSet(ctx, "user:session", "Boxes", string(data)).Err()
 }
 
+// AddBoxToCache appends a newly created box to the cached box list so that
+// "cb <new-box>" works immediately without requiring a re-login.
+func AddBoxToCache(rdb *redis.Client, boxName string) error {
+	ctx := context.Background()
+	data, err := rdb.HGet(ctx, "user:session", "Boxes").Result()
+	if err == redis.Nil {
+		data = "[]"
+	} else if err != nil {
+		return err
+	}
+
+	var boxes []map[string]any
+	if err := json.Unmarshal([]byte(data), &boxes); err != nil {
+		return err
+	}
+	boxes = append(boxes, map[string]any{"name": boxName})
+
+	updated, err := json.Marshal(boxes)
+	if err != nil {
+		return err
+	}
+	return rdb.HSet(ctx, "user:session", "Boxes", string(updated)).Err()
+}
+
 // GetBoxName returns the name of the currently active box from the session.
 func GetBoxName(rdb *redis.Client) (string, error) {
 	ctx := context.Background()
