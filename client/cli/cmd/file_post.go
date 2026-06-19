@@ -148,6 +148,28 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 			return fmt.Errorf("S3 upload failed: %s — %s", putResp.Status, string(errBody))
 		}
 
+		// Step 3: Tell the server the upload succeeded so it marks the file confirmed.
+		// Without this, the file is invisible in listings (treated as an incomplete upload).
+		confirmURL := fmt.Sprintf("%s/v1/api/files/%d/confirm", config.BaseURL, presignData.FileID)
+		confirmCtx, confirmCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer confirmCancel()
+
+		confirmReq, err := http.NewRequestWithContext(confirmCtx, http.MethodPost, confirmURL, nil)
+		if err != nil {
+			return fmt.Errorf("build confirm request: %w", err)
+		}
+		confirmReq.Header.Set("Authorization", "Bearer "+jwtToken)
+
+		confirmResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(confirmReq)
+		if err != nil {
+			return fmt.Errorf("upload succeeded but failed to confirm with server: %w", err)
+		}
+		defer confirmResp.Body.Close()
+
+		if confirmResp.StatusCode < 200 || confirmResp.StatusCode >= 300 {
+			return fmt.Errorf("upload succeeded but server confirmation failed: %s", confirmResp.Status)
+		}
+
 		fmt.Printf("Uploaded %s (%d bytes)\n", filename, fileInfo.Size())
 		return nil
 	},

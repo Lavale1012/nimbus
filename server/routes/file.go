@@ -22,6 +22,9 @@ func InitFileRoutes(r *gin.Engine, config s3db.Config, db *gorm.DB) {
 		route.POST("/files/presign-upload", func(c *gin.Context) {
 			file.PresignUpload(config, db, c)
 		})
+		route.POST("/files/:id/confirm", func(c *gin.Context) {
+			file.Confirm(config, db, c)
+		})
 		route.DELETE("/files/:name", func(c *gin.Context) {
 			file.Delete(config, db, c)
 		})

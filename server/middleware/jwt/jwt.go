@@ -17,14 +17,17 @@ import (
 
 var secretKey []byte
 
+func init() {
+	secret, err := utils.GetEnv("JWT_SECRET")
+	if err != nil {
+		panic("JWT_SECRET is not set: " + err.Error())
+	}
+	secretKey = []byte(secret)
+}
+
 // CreateToken issues a signed JWT for the given email and userID.
 // The token expires after 24 hours and is signed with HS256 using JWT_SECRET.
 func CreateToken(email, userID string) (string, error) {
-	secret, err := utils.GetEnv("JWT_SECRET")
-	if err != nil {
-		return "", err
-	}
-	secretKey = []byte(secret)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"user_id": userID,
@@ -44,12 +47,6 @@ func CreateToken(email, userID string) (string, error) {
 // JWT_SECRET. It also rejects tokens that weren't signed with HMAC (HS256) to
 // prevent the "alg:none" attack where an attacker strips the signature.
 func VerifyToken(tokenString string) error {
-	secret, err := utils.GetEnv("JWT_SECRET")
-	if err != nil {
-		return err
-	}
-	secretKey = []byte(secret)
-
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Reject any token whose header says it uses a non-HMAC algorithm.
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -72,12 +69,6 @@ func VerifyToken(tokenString string) error {
 // GetEmailFromToken decodes the token's claims and returns the email field.
 // Assumes the token has already been verified with VerifyToken.
 func GetEmailFromToken(tokenString string) (string, error) {
-	secret, err := utils.GetEnv("JWT_SECRET")
-	if err != nil {
-		return "", err
-	}
-	secretKey = []byte(secret)
-
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

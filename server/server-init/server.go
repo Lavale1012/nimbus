@@ -112,9 +112,29 @@ func InitServer() error {
 	routes.InitFolderRoutes(r, config, DB)
 	routes.InitUserRoutes(r, DB, S3)
 
-	// /health is a simple liveness probe used by the ALB and docker-compose healthcheck.
+	// /health checks both the database and S3 so the ALB only routes traffic to
+	// a fully operational instance. Returns 503 if either dependency is down.
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		// Ping the database.
+		sqlDB, err := DB.DB()
+		if err != nil || sqlDB.Ping() != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "reason": "database unavailable"})
+			return
+		}
+
+		// Verify S3 is reachable by listing objects in the bucket (max 1 result).
+		hCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+		maxKeys := int32(1)
+		if _, err := S3.ListObjectsV2(hCtx, &s3.ListObjectsV2Input{
+			Bucket:  &bucket,
+			MaxKeys: &maxKeys,
+		}); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "reason": "storage unavailable"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	// Configure HTTP server timeouts.

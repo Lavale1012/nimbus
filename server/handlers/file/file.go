@@ -203,8 +203,47 @@ func Delete(d s3db.Config, db *gorm.DB, c *gin.Context) {
 		return
 	}
 
+	// Decrement box size only for confirmed files (unconfirmed files were never counted).
+	if fileModel.Confirmed {
+		db.Model(&models.Box{}).Where("id = ?", fileModel.BoxID).
+			UpdateColumn("size", gorm.Expr("size - ?", fileModel.Size))
+	}
+
 	log.Printf("[DELETE] Success - user_id: %d, file: %s, duration: %v", user.ID, keyName, time.Since(startTime))
 	c.JSON(http.StatusOK, gin.H{"message": "file deleted"})
+}
+
+func Confirm(h s3db.Config, db *gorm.DB, c *gin.Context) {
+	user, err := jwt.AuthenticateUser(c, db)
+	if err != nil {
+		log.Printf("[CONFIRM] Auth failed from IP: %s", c.ClientIP())
+		return
+	}
+
+	fileID := c.Param("id")
+	if fileID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file id is required"})
+		return
+	}
+
+	var fileModel models.File
+	if err := db.Where("id = ? AND user_id = ?", fileID, user.ID).First(&fileModel).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	if err := db.Model(&fileModel).Update("confirmed", true).Error; err != nil {
+		log.Printf("[CONFIRM] DB update failed - user_id: %d, file_id: %s, error: %v", user.ID, fileID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to confirm upload"})
+		return
+	}
+
+	// Increment box size now that the upload is confirmed complete.
+	db.Model(&models.Box{}).Where("id = ?", fileModel.BoxID).
+		UpdateColumn("size", gorm.Expr("size + ?", fileModel.Size))
+
+	log.Printf("[CONFIRM] Success - user_id: %d, file: %s", user.ID, fileModel.Name)
+	c.JSON(http.StatusOK, gin.H{"message": "upload confirmed", "file": fileModel.Name})
 }
 
 func List(h s3db.Config, db *gorm.DB, c *gin.Context) {
@@ -233,8 +272,9 @@ func List(h s3db.Config, db *gorm.DB, c *gin.Context) {
 		S3Key     string `json:"s3_key"`
 		CreatedAt string `json:"created_at"`
 	}
+	// Only return confirmed files — unconfirmed means the S3 PUT never completed.
 	db.Model(&models.File{}).
-		Where("box_id = ? AND user_id = ?", box.ID, user.ID).
+		Where("box_id = ? AND user_id = ? AND confirmed = true", box.ID, user.ID).
 		Select("id, name, size, s3_key, created_at").
 		Find(&files)
 

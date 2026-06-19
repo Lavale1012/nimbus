@@ -100,10 +100,9 @@ func CreateBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	c.JSON(http.StatusCreated, gin.H{"message": "box created successfully", "box": sanitizedName})
 }
 
-// DeleteBox removes a box and its S3 prefix object from both storage and the
-// database. Note: this only deletes the top-level placeholder key — individual
-// files inside the box must be deleted separately (or via a cascade when the
-// database record is removed).
+// DeleteBox removes a box and ALL of its S3 objects from both storage and the
+// database. It lists every object under the box's S3 prefix and deletes them
+// before removing the database record, so no orphaned bytes are left in S3.
 func DeleteBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
 	var box models.Box
@@ -127,18 +126,39 @@ func DeleteBox(h s3db.Config, c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	key := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, sanitizedName)
+	prefix := fmt.Sprintf("users/nim-user-%d/boxes/%s/", user.ID, sanitizedName)
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 	defer cancel()
 
-	_, err = h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: &h.Bucket,
-		Key:    &key,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete box from storage"})
-		return
+	// Delete all S3 objects under the box prefix, paginating through results.
+	var continuationToken *string
+	for {
+		listOut, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            &h.Bucket,
+			Prefix:            &prefix,
+			ContinuationToken: continuationToken,
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list box contents in storage"})
+			return
+		}
+
+		for _, obj := range listOut.Contents {
+			key := *obj.Key
+			if _, err := h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: &h.Bucket,
+				Key:    &key,
+			}); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete box contents from storage"})
+				return
+			}
+		}
+
+		if listOut.IsTruncated == nil || !*listOut.IsTruncated || listOut.NextContinuationToken == nil {
+			break
+		}
+		continuationToken = listOut.NextContinuationToken
 	}
 
 	if err := db.Delete(&box).Error; err != nil {

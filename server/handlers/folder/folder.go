@@ -170,17 +170,29 @@ func Download(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	list, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: &h.Bucket,
-		Prefix: &key,
-	})
-
-	if err != nil {
-		c.JSON(500, gin.H{"error": "failed to list folder contents"})
-		return
+	// Collect all object keys, paginating through results (S3 returns max 1,000 per call).
+	var allKeys []string
+	var continuationToken *string
+	for {
+		page, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            &h.Bucket,
+			Prefix:            &key,
+			ContinuationToken: continuationToken,
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to list folder contents"})
+			return
+		}
+		for _, obj := range page.Contents {
+			allKeys = append(allKeys, *obj.Key)
+		}
+		if page.IsTruncated == nil || !*page.IsTruncated || page.NextContinuationToken == nil {
+			break
+		}
+		continuationToken = page.NextContinuationToken
 	}
 
-	if len(list.Contents) == 0 {
+	if len(allKeys) == 0 {
 		c.JSON(404, gin.H{"error": "folder is empty or not found"})
 		return
 	}
@@ -191,9 +203,7 @@ func Download(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	zipWriter := zip.NewWriter(c.Writer)
 	defer zipWriter.Close()
 
-	for _, obj := range list.Contents {
-		objKey := *obj.Key
-
+	for _, objKey := range allKeys {
 		Output, err := h.Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: &h.Bucket,
 			Key:    &objKey,
@@ -216,6 +226,7 @@ func Download(h s3db.Config, c *gin.Context, db *gorm.DB) {
 
 		_, err = io.Copy(w, Output.Body)
 		if err != nil {
+			Output.Body.Close()
 			continue
 		}
 		Output.Body.Close()
@@ -324,26 +335,12 @@ func List(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	})
 }
 func Move(h s3db.Config, c *gin.Context, db *gorm.DB) {
-	user, err := jwt.AuthenticateUser(c, db)
-	if err != nil {
-		c.JSON(401, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	boxName := c.Query("box_name")
-	if boxName == "" {
-		c.JSON(400, gin.H{"error": "box_name is required"})
-		return
-	}
-
-	_, err = helpers.ValidateBoxOwnership(db, boxName, user.ID)
-	if err != nil {
-		c.JSON(403, gin.H{"error": "box not found or access denied"})
-		return
-	}
-
+	c.JSON(501, gin.H{"error": "folder move is not yet implemented"})
 }
-func Upload(h s3db.Config, c *gin.Context) {}
+
+func Upload(h s3db.Config, c *gin.Context) {
+	c.JSON(501, gin.H{"error": "folder upload is not yet implemented"})
+}
 
 func Rename(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	user, err := jwt.AuthenticateUser(c, db)
@@ -421,34 +418,60 @@ func Rename(h s3db.Config, c *gin.Context, db *gorm.DB) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 		defer cancel()
 
-		list, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			Bucket: &h.Bucket,
-			Prefix: &oldPrefix,
-		})
-		if err != nil {
-			c.JSON(500, gin.H{"error": "failed to list folder contents in S3"})
-			return
+		// Paginate through all objects under the old prefix.
+		var oldKeys []string
+		var ct *string
+		for {
+			page, err := h.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+				Bucket:            &h.Bucket,
+				Prefix:            &oldPrefix,
+				ContinuationToken: ct,
+			})
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to list folder contents in S3"})
+				return
+			}
+			for _, obj := range page.Contents {
+				oldKeys = append(oldKeys, *obj.Key)
+			}
+			if page.IsTruncated == nil || !*page.IsTruncated || page.NextContinuationToken == nil {
+				break
+			}
+			ct = page.NextContinuationToken
 		}
 
-		for _, obj := range list.Contents {
-			oldKey := *obj.Key
+		// Copy each object to the new prefix, tracking what was successfully copied
+		// so we can roll back if a subsequent delete fails.
+		var copiedNewKeys []string
+		for _, oldKey := range oldKeys {
 			newKey := newPrefix + strings.TrimPrefix(oldKey, oldPrefix)
 			copySource := h.Bucket + "/" + oldKey
 
-			_, err := h.Client.CopyObject(ctx, &s3.CopyObjectInput{
+			if _, err := h.Client.CopyObject(ctx, &s3.CopyObjectInput{
 				Bucket:     &h.Bucket,
 				CopySource: &copySource,
 				Key:        &newKey,
-			})
-			if err != nil {
+			}); err != nil {
+				// Roll back any copies already written.
+				for _, k := range copiedNewKeys {
+					h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &h.Bucket, Key: &k})
+				}
 				c.JSON(500, gin.H{"error": "failed to copy S3 objects during rename"})
 				return
 			}
+			copiedNewKeys = append(copiedNewKeys, newKey)
+		}
 
-			h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		// All copies succeeded — delete the originals.
+		for _, oldKey := range oldKeys {
+			if _, err := h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 				Bucket: &h.Bucket,
 				Key:    &oldKey,
-			})
+			}); err != nil {
+				// Non-fatal: the new keys already exist and the DB will be updated.
+				// Log and continue so one stale original doesn't abort the rename.
+				fmt.Printf("[RENAME] warning: failed to delete old S3 key %s: %v\n", oldKey, err)
+			}
 		}
 	}
 

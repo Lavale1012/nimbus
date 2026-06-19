@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ func ValidateBoxOwnership(db *gorm.DB, boxName string, userID uint) (*models.Box
 // GenerateS3Key builds the full S3 object key for a file being uploaded.
 // The format is:
 //
-//	users/nim-user-<userID>/boxes/<boxName><filePath>/<filename>_<unix_timestamp>
+//	users/nim-user-<userID>/boxes/<boxName>/<filePath>/<filename>_<unix_timestamp>
 //
 // The timestamp suffix prevents collisions when the same filename is uploaded
 // to the same path multiple times.
@@ -40,8 +41,17 @@ func GenerateS3Key(filePath, filename, boxName string, user *models.User) (strin
 	if base == "" {
 		return "", fmt.Errorf("invalid filename")
 	}
+
+	// Sanitize filePath: clean away any ../ traversal sequences, then confirm
+	// the result contains no ".." components so an attacker cannot escape the
+	// user's own prefix space in S3.
+	cleaned := path.Clean("/" + filePath)
+	if strings.Contains(cleaned, "..") {
+		return "", fmt.Errorf("invalid filePath: path traversal not allowed")
+	}
+
 	timestamp := time.Now().Unix()
-	fullPath := fmt.Sprintf("%s%s/%s_%d", fullFilePathPrefix, filePath, base, timestamp)
+	fullPath := fmt.Sprintf("%s%s/%s_%d", fullFilePathPrefix, cleaned, base, timestamp)
 	return fullPath, nil
 }
 
