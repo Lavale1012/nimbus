@@ -14,8 +14,8 @@ import (
 type User struct {
 	ID       uint   `gorm:"primaryKey;autoIncrement:false" json:"id"`
 	Email    string `gorm:"unique;not null" json:"email"`
-	Password string `gorm:"not null" json:"password"` // stored as bcrypt hash
-	PassKey  string `gorm:"not null" json:"passkey"`  // stored as bcrypt hash
+	Password string `gorm:"not null" json:"-"` // stored as bcrypt hash
+	PassKey  string `gorm:"not null" json:"-"` // stored as bcrypt hash
 	Boxes    []Box  `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"boxes,omitempty"`
 	gorm.Model       // adds CreatedAt, UpdatedAt, DeletedAt
 }

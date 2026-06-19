@@ -11,9 +11,9 @@ import (
 // It uses the go-figure library which renders text using figlet fonts.
 func ShowLoginBanner() {
 	myFigure := figure.NewColorFigure("Welcome to Nimbus CLI!", "smslant", "blue", true)
-	Toplines := figure.NewColorFigure("===================================================================", "term", "cyan", true)
-	myFigure2 := figure.NewColorFigure("|| Please enter your login credentials for Nimbus Drive ||", "term", "green", true)
-	Bottomlines := figure.NewColorFigure("===================================================================", "term", "cyan", true)
+	Toplines := figure.NewColorFigure("===============================================", "term", "cyan", true)
+	myFigure2 := figure.NewColorFigure("|| Please enter your login credentials ||", "term", "green", true)
+	Bottomlines := figure.NewColorFigure("===============================================", "term", "cyan", true)
 	myFigure.Print()
 	fmt.Print("\n")
 	Toplines.Print()

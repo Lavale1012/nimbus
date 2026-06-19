@@ -1,8 +1,10 @@
 # syntax=docker/dockerfile:1
 
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS build
 WORKDIR /src
+
+ENV GOTOOLCHAIN=auto
 
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,source=go.sum,target=go.sum \

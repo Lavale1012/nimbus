@@ -11,6 +11,8 @@ import (
 
 // InitUserRoutes registers the authentication endpoints under /v1/api/auth/.
 func InitUserRoutes(r *gin.Engine, db *gorm.DB, s3Client *s3.Client) {
+	r.GET("/register", user.ServeRegisterPage)
+
 	route := r.Group("v1/api/auth/")
 	{
 		route.POST("/users/register", func(c *gin.Context) {
