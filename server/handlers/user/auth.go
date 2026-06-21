@@ -42,7 +42,7 @@ type LoginRequest struct {
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	PassKey  string `json:"pass_key" binding:"required"`
+	PassKey  string `json:"passkey" binding:"required"`
 }
 
 // ── HTML ─────────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ const registerPage = `<!DOCTYPE html>
         const res = await fetch("/v1/api/auth/users/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: data.email, password: data.password, pass_key: data.passkey })
+          body: JSON.stringify({ email: data.email, password: data.password, passkey: data.passkey })
         });
         const json = await res.json();
         if (!res.ok) {

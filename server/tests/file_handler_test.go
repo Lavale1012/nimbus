@@ -138,8 +138,8 @@ func TestListFiles_WithFiles(t *testing.T) {
 	u, b := createFileHandlerUser(t, db)
 	r := fileListRouter(db)
 
-	db.Create(&models.File{UserID: u.ID, BoxID: b.ID, Name: "a.txt", Size: 100, S3Key: "list-a.txt"})
-	db.Create(&models.File{UserID: u.ID, BoxID: b.ID, Name: "b.txt", Size: 200, S3Key: "list-b.txt"})
+	db.Create(&models.File{UserID: u.ID, BoxID: b.ID, Name: "a.txt", Size: 100, S3Key: "list-a.txt", Confirmed: true})
+	db.Create(&models.File{UserID: u.ID, BoxID: b.ID, Name: "b.txt", Size: 200, S3Key: "list-b.txt", Confirmed: true})
 
 	req, _ := http.NewRequest(http.MethodGet, "/files?box_name=Test-Box", nil)
 	req.Header.Set("Authorization", authHeader(t, u))
@@ -168,8 +168,8 @@ func TestListFiles_OnlyShowsOwnFiles(t *testing.T) {
 	}
 	db.Create(u2)
 
-	db.Create(&models.File{UserID: u1.ID, BoxID: b1.ID, Name: "mine.txt", Size: 100, S3Key: "mine-key.txt"})
-	db.Create(&models.File{UserID: u2.ID, BoxID: u2.Boxes[0].ID, Name: "theirs.txt", Size: 200, S3Key: "theirs-key.txt"})
+	db.Create(&models.File{UserID: u1.ID, BoxID: b1.ID, Name: "mine.txt", Size: 100, S3Key: "mine-key.txt", Confirmed: true})
+	db.Create(&models.File{UserID: u2.ID, BoxID: u2.Boxes[0].ID, Name: "theirs.txt", Size: 200, S3Key: "theirs-key.txt", Confirmed: true})
 
 	r := fileListRouter(db)
 	req, _ := http.NewRequest(http.MethodGet, "/files?box_name=Test-Box", nil)
