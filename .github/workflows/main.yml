@@ -29,6 +29,8 @@ jobs:
         run: cd client && go test ./...
 
       - name: Test server
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: cd server && go test ./...
 
       - name: Build client
