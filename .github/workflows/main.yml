@@ -1,0 +1,53 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22
+
+      - name: Install client dependencies
+        run: cd client && go mod download
+
+      - name: Install server dependencies
+        run: cd server && go mod download
+
+      - name: Test client
+        run: cd client && go test ./...
+
+      - name: Test server
+        run: cd server && go test ./...
+
+      - name: Build client
+        run: cd client && go build -o nimbus ./cli/main.go
+
+      - name: Build server
+        run: cd server && go build -o api-server ./main.go
+
+  notify-n8n-on-failure:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: failure()
+    steps:
+      - name: Trigger n8n webhook
+        run: |
+          curl -X POST "${{ secrets.N8N_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "x-webhook-secret: ${{ secrets.N8N_WEBHOOK_SECRET }}" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "repo": "${{ github.repository }}",
+              "branch": "${{ github.ref_name }}",
+              "commit": "${{ github.sha }}",
+              "actor": "${{ github.actor }}"
+             }'
