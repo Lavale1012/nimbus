@@ -40,9 +40,9 @@ type LoginRequest struct {
 // RegisterRequest is the JSON body expected by the /register endpoint.
 // Using a dedicated struct keeps sensitive fields out of the User model's JSON tags.
 type RegisterRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	PassKey  string `json:"passkey" binding:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	PassKey  string `json:"passkey"`
 }
 
 // ── HTML ─────────────────────────────────────────────────────────────────────
