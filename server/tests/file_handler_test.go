@@ -18,7 +18,7 @@ import (
 )
 
 func setupFileHandlerDB(t *testing.T) *gorm.DB {
-	t.Helper()
+	// t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open test db: %v", err)
@@ -35,11 +35,11 @@ func createFileHandlerUser(t *testing.T, db *gorm.DB) (*models.User, *models.Box
 	userID, _ := utils.GenerateUserID()
 	hash, _ := utils.PasswordHash("Test123!@#")
 	u := &models.User{
-		ID:      userID,
-		Email:   fmt.Sprintf("filehandler-%d@example.com", userID),
+		ID:       userID,
+		Email:    fmt.Sprintf("filehandler-%d@example.com", userID),
 		Password: hash,
 		PassKey:  "1234",
-		Boxes:   []models.Box{{Name: "Test-Box", BoxID: boxID}},
+		Boxes:    []models.Box{{Name: "Test-Box", BoxID: boxID}},
 	}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatalf("failed to create user: %v", err)
@@ -288,8 +288,8 @@ func TestMoveFile_MissingParams(t *testing.T) {
 	r := fileMoveRouter(db)
 
 	cases := []string{
-		"/files/move?key=f.txt",          // missing box_name
-		"/files/move?box_name=Test-Box",  // missing key
+		"/files/move?key=f.txt",         // missing box_name
+		"/files/move?box_name=Test-Box", // missing key
 	}
 	for _, path := range cases {
 		req, _ := http.NewRequest(http.MethodPatch, path, nil)
