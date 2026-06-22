@@ -126,7 +126,7 @@ func TestListFiles_EmptyBox(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusTeapot, w.Code) // intentional failure
+	assert.Equal(t, http.StatusOK, w.Code)
 	var body map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &body)
 	files := body["files"].([]interface{})
