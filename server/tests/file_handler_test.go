@@ -18,7 +18,7 @@ import (
 )
 
 func setupFileHandlerDB(t *testing.T) *gorm.DB {
-	// t.Helper()
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open test db: %v", err)
@@ -126,7 +126,7 @@ func TestListFiles_EmptyBox(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusTeapot, w.Code) // intentional failure
 	var body map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &body)
 	files := body["files"].([]interface{})
