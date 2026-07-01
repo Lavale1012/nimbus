@@ -45,6 +45,15 @@ type RegisterRequest struct {
 	PassKey  string `json:"passkey"`
 }
 
+// ResetPasswordRequest is the JSON body expected by the /reset-password endpoint.
+// The passkey (set at registration) acts as the proof-of-identity that authorizes
+// replacing a forgotten password — there is no email/SMS channel in the system.
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	PassKey     string `json:"passkey"`
+	NewPassword string `json:"new_password"`
+}
+
 // ── HTML ─────────────────────────────────────────────────────────────────────
 
 const registerPage = `<!DOCTYPE html>
@@ -355,4 +364,92 @@ func Register(c *gin.Context, db *gorm.DB, s3Client *s3.Client) {
 		"user_id": user.ID,
 		"box":     user.Boxes[0].Name,
 	})
+}
+
+// ResetPassword lets a user replace a forgotten password by proving they know
+// their passkey (the 4-character secret chosen at registration).
+//
+// Security properties, mirroring Login:
+//   - Enumeration-safe: an unknown email still runs bcrypt against a dummy hash so
+//     the response timing matches a real (but wrong) passkey, and the same generic
+//     error is returned in both cases.
+//   - No JWT is issued on success — the user must log in normally afterward.
+//   - The new password must satisfy the same complexity rules as registration and
+//     must differ from the current password.
+//
+// Brute-force resistance additionally relies on the rate limiter applied to this
+// route (see middleware/ratelimit) plus bcrypt's cost-14 hashing.
+func ResetPassword(c *gin.Context, db *gorm.DB) {
+	var req ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	if req.Email == "" || req.PassKey == "" || req.NewPassword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email, passkey, and new password are required"})
+		return
+	}
+
+	if len(req.Email) > MAX_EMAIL_LENGTH || !isEmailValid(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+		return
+	}
+
+	if len(req.PassKey) != PASSKEY_LENGTH {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Passkey must be exactly 4 characters long"})
+		return
+	}
+
+	if len(req.NewPassword) < MIN_PASSWORD_LENGTH || len(req.NewPassword) > MAX_PASSWORD_LENGTH {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 8 and 72 characters long"})
+		return
+	}
+
+	minLength, number, upper, lower, special := isValidPassword(req.NewPassword)
+	if !minLength || !number || !upper || !lower || !special {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Password must be at least 8 characters and include at least one number, one uppercase letter, one lowercase letter, and one special character",
+		})
+		return
+	}
+
+	var user models.User
+	err := db.Where("email = ?", req.Email).First(&user).Error
+
+	var passKeyValid bool
+	if err != nil {
+		// Unknown email: burn the same amount of time so timing can't reveal it.
+		utils.VerifyPasswordHash(req.PassKey, dummyHash)
+		passKeyValid = false
+	} else {
+		passKeyValid = utils.VerifyPasswordHash(req.PassKey, user.PassKey)
+	}
+
+	if !passKeyValid {
+		log.Printf("Failed password reset attempt for email: %s from IP: %s", req.Email, c.ClientIP())
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or passkey"})
+		return
+	}
+
+	// Don't allow "resetting" to the same password.
+	if utils.VerifyPasswordHash(req.NewPassword, user.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "New password must be different from the current password"})
+		return
+	}
+
+	hashedPassword, err := utils.PasswordHash(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password reset"})
+		return
+	}
+
+	if err := db.Model(&user).Update("password", hashedPassword).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+		return
+	}
+
+	log.Printf("Password reset successful for email: %s from IP: %s", req.Email, c.ClientIP())
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successful"})
 }

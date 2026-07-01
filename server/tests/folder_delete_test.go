@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	s3db "github.com/nimbus/api/db/s3"
 	"github.com/nimbus/api/handlers/folder"
 	"github.com/nimbus/api/middleware/jwt"
 	"github.com/nimbus/api/models"
 	"github.com/nimbus/api/utils"
-	s3db "github.com/nimbus/api/db/s3"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -38,11 +38,11 @@ func createFolderDeleteUser(t *testing.T, db *gorm.DB) (*models.User, *models.Bo
 	userID, _ := utils.GenerateUserID()
 	hash, _ := utils.PasswordHash("Test123!@#")
 	u := &models.User{
-		ID:      userID,
-		Email:   fmt.Sprintf("foldertest-%d@example.com", userID),
+		ID:       userID,
+		Email:    fmt.Sprintf("foldertest-%d@example.com", userID),
 		Password: hash,
 		PassKey:  "1234",
-		Boxes:   []models.Box{{Name: "Test-Box", BoxID: boxID}},
+		Boxes:    []models.Box{{Name: "Test-Box", BoxID: boxID}},
 	}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatalf("failed to create user: %v", err)

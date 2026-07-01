@@ -196,10 +196,10 @@ func TestListBoxesResponse_ErrorStatus(t *testing.T) {
 
 func TestLoginResponse_Parsing(t *testing.T) {
 	payload := map[string]any{
-		"message":  "Login successful",
-		"token":    "eyJhbGciOiJIUzI1NiJ9.test",
-		"email":    "user@example.com",
-		"user_id":  float64(42),
+		"message": "Login successful",
+		"token":   "eyJhbGciOiJIUzI1NiJ9.test",
+		"email":   "user@example.com",
+		"user_id": float64(42),
 		"box": []map[string]any{
 			{"name": "Home-Box"},
 		},
