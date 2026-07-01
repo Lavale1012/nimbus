@@ -147,8 +147,8 @@ func TestStoreBoxesAndBoxExists(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		want   bool
+		name string
+		want bool
 	}{
 		{"alpha", true},
 		{"beta", true},

@@ -259,11 +259,11 @@ func TestFolderList_OnlyShowsOwnContents(t *testing.T) {
 	userID2, _ := utils.GenerateUserID()
 	hash, _ := utils.PasswordHash("Test123!@#")
 	u2 := &models.User{
-		ID:      userID2,
-		Email:   fmt.Sprintf("other-fl-%d@example.com", userID2),
+		ID:       userID2,
+		Email:    fmt.Sprintf("other-fl-%d@example.com", userID2),
 		Password: hash,
 		PassKey:  "1234",
-		Boxes:   []models.Box{{Name: "Test-Box", BoxID: boxID2}},
+		Boxes:    []models.Box{{Name: "Test-Box", BoxID: boxID2}},
 	}
 	db.Create(u2)
 

@@ -35,11 +35,11 @@ func createBoxHandlerUser(t *testing.T, db *gorm.DB) *models.User {
 	userID, _ := utils.GenerateUserID()
 	hash, _ := utils.PasswordHash("Test123!@#")
 	u := &models.User{
-		ID:      userID,
-		Email:   fmt.Sprintf("boxtest-%d@example.com", userID),
+		ID:       userID,
+		Email:    fmt.Sprintf("boxtest-%d@example.com", userID),
 		Password: hash,
 		PassKey:  "1234",
-		Boxes:   []models.Box{{Name: "Home-Box", BoxID: boxID}},
+		Boxes:    []models.Box{{Name: "Home-Box", BoxID: boxID}},
 	}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatalf("failed to create user: %v", err)
