@@ -183,7 +183,7 @@ func GetCurrentPath(rdb *redis.Client) (string, error) {
 	ctx := context.Background()
 	path, err := rdb.HGet(ctx, "user:session", "CurrentPath").Result()
 	if err == redis.Nil {
-		return "", errors.New("Path not found")
+		return "", errors.New("path not found")
 	} else if err != nil {
 		return "", err
 	}

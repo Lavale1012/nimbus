@@ -25,7 +25,7 @@ var deleteFolderCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -73,7 +73,7 @@ var deleteFolderCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error deleting folder: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		switch resp.StatusCode {
 		case http.StatusOK:

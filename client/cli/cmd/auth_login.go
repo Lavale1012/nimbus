@@ -52,7 +52,7 @@ var loginCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer redisClient.Close()
+		defer func() { _ = redisClient.Close() }()
 
 		// If a session already exists the user is already logged in — no-op.
 		sessionExists, err := cache.SessionExists(redisClient)
@@ -88,7 +88,7 @@ var loginCmd = &cobra.Command{
 
 		// term.ReadPassword reads the password without echoing it to the terminal.
 		fmt.Print("Enter password: ")
-		password, _ := term.ReadPassword(int(syscall.Stdin))
+		password, _ := term.ReadPassword(syscall.Stdin)
 		loginRequest.Password = string(password)
 		fmt.Print("\n")
 		if loginRequest.Password == "" {
@@ -109,7 +109,7 @@ var loginCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to perform request: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("login failed: %s", resp.Status)
@@ -151,7 +151,7 @@ func runPasswordReset() error {
 	}
 
 	fmt.Print("Enter passkey (4 characters): ")
-	passkey, _ := term.ReadPassword(int(syscall.Stdin))
+	passkey, _ := term.ReadPassword(syscall.Stdin)
 	fmt.Print("\n")
 	req.PassKey = string(passkey)
 	if req.PassKey == "" {
@@ -159,7 +159,7 @@ func runPasswordReset() error {
 	}
 
 	fmt.Print("Enter new password: ")
-	newPass, _ := term.ReadPassword(int(syscall.Stdin))
+	newPass, _ := term.ReadPassword(syscall.Stdin)
 	fmt.Print("\n")
 	req.NewPassword = string(newPass)
 	if req.NewPassword == "" {
@@ -167,7 +167,7 @@ func runPasswordReset() error {
 	}
 
 	fmt.Print("Confirm new password: ")
-	confirm, _ := term.ReadPassword(int(syscall.Stdin))
+	confirm, _ := term.ReadPassword(syscall.Stdin)
 	fmt.Print("\n")
 	if req.NewPassword != string(confirm) {
 		return fmt.Errorf("passwords do not match")
@@ -186,14 +186,15 @@ func runPasswordReset() error {
 	if err != nil {
 		return fmt.Errorf("failed to perform request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Surface the server's error message when available.
 		var errResp struct {
 			Error string `json:"error"`
 		}
-		if json.NewDecoder(resp.Body).Decode(&errResp); errResp.Error != "" {
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
 			return fmt.Errorf("password reset failed: %s", errResp.Error)
 		}
 		return fmt.Errorf("password reset failed: %s", resp.Status)

@@ -18,7 +18,7 @@ var registerCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to connect to cache: %w", err)
 		}
-		defer rdb.Close()
+		defer func() { _ = rdb.Close() }()
 
 		loggedIn, err := cache.SessionExists(rdb)
 		if err != nil {

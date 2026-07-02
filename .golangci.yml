@@ -1,0 +1,67 @@
+# golangci-lint configuration for Nimbus CLI (v2 schema).
+# Shared by both Go modules (client/ and server/); CI runs the linter once per
+# module (via the action's working-directory) pointing at this root config.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # Start from a curated set rather than "enable-all" to keep signal high on an
+  # existing codebase. These are the high-value, low-noise linters.
+  #
+  # NOTE: in v2, gofmt/goimports are formatters (see the `formatters` block) and
+  # gosimple was folded into staticcheck, so none of those appear here.
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # go vet
+    - ineffassign   # assignments that are never used
+    - staticcheck   # broad correctness/bug analysis (includes former gosimple)
+    - unused        # unused code
+    - misspell      # common spelling mistakes in comments/strings
+    - bodyclose     # HTTP response bodies must be closed
+    - unconvert     # unnecessary type conversions
+  # noctx is intentionally NOT enabled: the CLI issues one-shot requests via
+  # http.Client{Timeout: ...}, which already bounds them. Threading context.Context
+  # through every cobra command adds noise without real benefit here. Revisit if
+  # the client grows cancellation/deadline requirements.
+
+  settings:
+    errcheck:
+      # Don't flag these common fire-and-forget calls where a returned error is
+      # genuinely not actionable (terminal prompts, progress bars, cobra flag
+      # registration, gin JSON writes). This keeps errcheck focused on real
+      # unhandled errors instead of drowning in known-safe call sites.
+      exclude-functions:
+        # gin response writers
+        - (*github.com/gin-gonic/gin.Context).JSON
+        - (*github.com/gin-gonic/gin.Engine).SetTrustedProxies
+        # stdlib terminal I/O and scanning
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Scanln
+        - fmt.Sscanf
+        # env loading (best-effort; missing .env is expected)
+        - github.com/joho/godotenv.Load
+        # cobra flag registration (only errors on a programming mistake)
+        - (*github.com/spf13/cobra.Command).MarkFlagRequired
+        # progressbar helpers
+        - (*github.com/schollz/progressbar/v3.ProgressBar).Add
+        - (*github.com/schollz/progressbar/v3.ProgressBar).Finish
+
+  exclusions:
+    rules:
+      # Test files legitimately ignore some errors (e.g. json.Unmarshal in
+      # asserts) and don't need bodyclose rigor. Relax the noisiest ones there.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+
+# In v2, formatting linters live in their own block and run via
+# `golangci-lint fmt`. They are still checked in `run` mode and fail CI on diff.
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -15,10 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	folderNameFlag string
-	folderDestFlag string
-)
+var folderNameFlag string
 
 var folderCmd = &cobra.Command{
 	Use:   "cdir <folder-name> [destination]",
@@ -29,15 +26,14 @@ var folderCmd = &cobra.Command{
 nim cdir my-folder path/to/parent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		folderNameFlag = args[0]
-		if len(args) > 1 {
-			folderDestFlag = args[1]
-		}
+		// NOTE: an optional destination path (args[1]) is accepted by the command
+		// signature but not yet wired into folder creation.
 
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -84,7 +80,7 @@ nim cdir my-folder path/to/parent`,
 		if err != nil {
 			return fmt.Errorf("error creating folder: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, _ := io.ReadAll(resp.Body)
 

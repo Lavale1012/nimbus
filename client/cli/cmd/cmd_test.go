@@ -167,7 +167,10 @@ func TestListBoxesResponse_Empty(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resp, _ := http.Get(srv.URL)
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
 	defer resp.Body.Close()
 
 	var result ListBoxesResponse
@@ -251,7 +254,10 @@ func TestListFolderResponse_Parsing(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resp, _ := http.Get(srv.URL)
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
 	defer resp.Body.Close()
 
 	var result ListResponse

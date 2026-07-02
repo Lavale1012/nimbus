@@ -60,7 +60,7 @@ nim cd ..           # Go up one level`,
 		var newPath string
 
 		if err != nil {
-			return fmt.Errorf("Cache error: %w", err)
+			return fmt.Errorf("cache error: %w", err)
 		}
 
 		IsLoggedIn, err := cache.SessionExists(RDB)
@@ -155,7 +155,7 @@ var pwdCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
-			return fmt.Errorf("Cache error: %w", err)
+			return fmt.Errorf("cache error: %w", err)
 		}
 
 		IsLoggedIn, err := cache.SessionExists(RDB)
@@ -201,9 +201,9 @@ nim ls /some/path   # List contents of absolute path`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		RDB, err := cache.NewRedisClient()
 		if err != nil {
-			return fmt.Errorf("Cache error: %w", err)
+			return fmt.Errorf("cache error: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -264,11 +264,11 @@ nim ls /some/path   # List contents of absolute path`,
 		if err != nil {
 			return fmt.Errorf("error fetching directory listing: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			var errBody map[string]string
-			json.NewDecoder(resp.Body).Decode(&errBody)
+			_ = json.NewDecoder(resp.Body).Decode(&errBody)
 			if msg, ok := errBody["error"]; ok {
 				return fmt.Errorf("%s", msg)
 			}

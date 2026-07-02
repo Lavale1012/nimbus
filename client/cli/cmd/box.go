@@ -23,7 +23,7 @@ var setCurrentBoxCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		IsLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
