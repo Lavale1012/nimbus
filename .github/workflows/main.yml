@@ -49,6 +49,12 @@ jobs:
         with:
           version: v2.1
           working-directory: ${{ matrix.module }}
+          # Build golangci-lint from source with the job's Go 1.26.4 toolchain.
+          # The prebuilt binaries are compiled with an older Go and refuse to lint
+          # a module whose go.mod targets a newer language version than the
+          # linter's own build ("Go language version ... is lower than the
+          # targeted Go version"). Compiling from source keeps them in sync.
+          install-mode: goinstall
           # Config lives at the repo root; point the linter at it explicitly.
           args: --config=${{ github.workspace }}/.golangci.yml
 
