@@ -35,7 +35,7 @@ var GetFileCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -83,7 +83,7 @@ var GetFileCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error requesting download URL: %w", err)
 		}
-		defer presignResp.Body.Close()
+		defer func() { _ = presignResp.Body.Close() }()
 
 		if presignResp.StatusCode < 200 || presignResp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(presignResp.Body)
@@ -109,7 +109,7 @@ var GetFileCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error downloading file from S3: %w", err)
 		}
-		defer getResp.Body.Close()
+		defer func() { _ = getResp.Body.Close() }()
 
 		if getResp.StatusCode < 200 || getResp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(getResp.Body)
@@ -120,7 +120,7 @@ var GetFileCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error creating output file: %w", err)
 		}
-		defer outFile.Close()
+		defer func() { _ = outFile.Close() }()
 
 		bar := animations.BytesBar(getResp.ContentLength, "Downloading "+filepath.Base(keyFlag))
 		progressWriter := &animations.ProgressWriter{Writer: outFile, Bar: bar}

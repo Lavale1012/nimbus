@@ -30,6 +30,9 @@ nim
 .env.prod
 .env.production
 
+# Internal review notes (not for commit)
+PRODUCTION_READINESS_REVIEW.txt
+
 # IDE files
 .vscode/
 .idea/

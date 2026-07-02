@@ -170,7 +170,7 @@ func InitServer() error {
 
 	// Close the database connection pool cleanly.
 	if sqlDB, err := DB.DB(); err == nil {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	}
 
 	log.Println("Server exited cleanly")

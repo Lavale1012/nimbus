@@ -24,7 +24,7 @@ var fileRenameCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -72,7 +72,7 @@ var fileRenameCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error renaming file: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(resp.Body)
@@ -80,7 +80,7 @@ var fileRenameCmd = &cobra.Command{
 		}
 
 		var result map[string]string
-		json.NewDecoder(resp.Body).Decode(&result)
+		_ = json.NewDecoder(resp.Body).Decode(&result)
 		fmt.Printf("Renamed to %s\n", newName)
 		return nil
 	},

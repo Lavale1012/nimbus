@@ -26,7 +26,7 @@ var renameFolderCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -75,7 +75,7 @@ var renameFolderCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("error renaming folder: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		switch resp.StatusCode {
 		case http.StatusOK:

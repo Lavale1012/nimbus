@@ -44,7 +44,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if err != nil {
 			return fmt.Errorf("failed to create Redis client: %w", err)
 		}
-		defer RDB.Close()
+		defer func() { _ = RDB.Close() }()
 
 		isLoggedIn, err := cache.SessionExists(RDB)
 		if err != nil {
@@ -68,7 +68,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if err != nil {
 			return fmt.Errorf("error opening file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		fileInfo, err := f.Stat()
 		if err != nil {
@@ -102,7 +102,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if err != nil {
 			return fmt.Errorf("error requesting upload URL: %w", err)
 		}
-		defer presignResp.Body.Close()
+		defer func() { _ = presignResp.Body.Close() }()
 
 		if presignResp.StatusCode < 200 || presignResp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(presignResp.Body)
@@ -141,7 +141,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if err != nil {
 			return fmt.Errorf("error uploading file to S3: %w", err)
 		}
-		defer putResp.Body.Close()
+		defer func() { _ = putResp.Body.Close() }()
 
 		if putResp.StatusCode < 200 || putResp.StatusCode >= 300 {
 			errBody, _ := io.ReadAll(putResp.Body)
@@ -164,7 +164,7 @@ nim post -f myfile.txt -d uploads/myfile.txt`,
 		if err != nil {
 			return fmt.Errorf("upload succeeded but failed to confirm with server: %w", err)
 		}
-		defer confirmResp.Body.Close()
+		defer func() { _ = confirmResp.Body.Close() }()
 
 		if confirmResp.StatusCode < 200 || confirmResp.StatusCode >= 300 {
 			return fmt.Errorf("upload succeeded but server confirmation failed: %s", confirmResp.Status)

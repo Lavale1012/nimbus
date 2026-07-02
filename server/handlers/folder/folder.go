@@ -201,7 +201,9 @@ func Download(h s3db.Config, c *gin.Context, db *gorm.DB) {
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, sanitizedName))
 
 	zipWriter := zip.NewWriter(c.Writer)
-	defer zipWriter.Close()
+	// Streamed straight to the HTTP response; headers are already sent, so a
+	// close error here isn't recoverable — ignore it explicitly.
+	defer func() { _ = zipWriter.Close() }()
 
 	for _, objKey := range allKeys {
 		Output, err := h.Client.GetObject(ctx, &s3.GetObjectInput{
@@ -214,22 +216,22 @@ func Download(h s3db.Config, c *gin.Context, db *gorm.DB) {
 
 		Name := strings.TrimPrefix(objKey, key)
 		if Name == "" {
-			Output.Body.Close()
+			_ = Output.Body.Close()
 			continue
 		}
 
 		w, err := zipWriter.Create(Name)
 		if err != nil {
-			Output.Body.Close()
+			_ = Output.Body.Close()
 			continue
 		}
 
 		_, err = io.Copy(w, Output.Body)
 		if err != nil {
-			Output.Body.Close()
+			_ = Output.Body.Close()
 			continue
 		}
-		Output.Body.Close()
+		_ = Output.Body.Close()
 	}
 }
 
@@ -452,9 +454,11 @@ func Rename(h s3db.Config, c *gin.Context, db *gorm.DB) {
 				CopySource: &copySource,
 				Key:        &newKey,
 			}); err != nil {
-				// Roll back any copies already written.
+				// Roll back any copies already written. Best-effort: a failed
+				// rollback delete leaves an orphaned object but shouldn't mask the
+				// original error, so the delete error is intentionally ignored.
 				for _, k := range copiedNewKeys {
-					h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &h.Bucket, Key: &k})
+					_, _ = h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &h.Bucket, Key: &k})
 				}
 				c.JSON(500, gin.H{"error": "failed to copy S3 objects during rename"})
 				return
@@ -546,7 +550,9 @@ func Delete(h s3db.Config, c *gin.Context, db *gorm.DB) {
 		}
 		for _, obj := range list.Contents {
 			key := *obj.Key
-			h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			// Best-effort cascade delete; a failure here is logged upstream and
+			// leaves an orphaned object rather than aborting the whole delete.
+			_, _ = h.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 				Bucket: &h.Bucket,
 				Key:    &key,
 			})
