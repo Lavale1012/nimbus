@@ -18,8 +18,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/nimbus/api/db/postgres"
+	redisdb "github.com/nimbus/api/db/redis"
 	s3db "github.com/nimbus/api/db/s3"
 	"github.com/nimbus/api/middleware/bodylimit"
+	"github.com/nimbus/api/middleware/ratelimit"
 	"github.com/nimbus/api/routes"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
@@ -112,11 +114,28 @@ func InitServer() error {
 		return fmt.Errorf("failed to connect to PostgreSQL")
 	}
 
+	// Build the auth rate limiter: 5 attempts / 15 min per key. Use Redis when
+	// REDIS_ADDR is configured so the limit is shared across all instances behind
+	// the load balancer and survives restarts; otherwise fall back to a
+	// per-process in-memory limiter (fine for single-instance / local dev).
+	redisClient, err := redisdb.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	var authLimiter *ratelimit.Limiter
+	if redisClient != nil {
+		authLimiter = ratelimit.NewWithRedis(redisClient, 5, 15*time.Minute)
+		log.Println("Rate limiter: using Redis (shared across instances)")
+	} else {
+		authLimiter = ratelimit.New(5, 15*time.Minute)
+		log.Println("Rate limiter: using in-memory store (REDIS_ADDR not set)")
+	}
+
 	// Register all route groups (files, boxes, folders, users).
 	routes.InitFileRoutes(r, config, DB)
 	routes.InitBoxRoutes(r, config, DB)
 	routes.InitFolderRoutes(r, config, DB)
-	routes.InitUserRoutes(r, DB, S3)
+	routes.InitUserRoutes(r, DB, S3, authLimiter)
 
 	// /health checks both the database and S3 so the ALB only routes traffic to
 	// a fully operational instance. Returns 503 if either dependency is down.

@@ -1,14 +1,17 @@
-// Package ratelimit provides a small, dependency-free per-key rate limiter for
-// Gin routes. It is used to slow brute-force attempts against the authentication
-// endpoints (login and password reset), where an attacker might otherwise guess
-// the short 4-character passkey.
+// Package ratelimit provides a per-key rate limiter for Gin routes. It is used
+// to slow brute-force attempts against the authentication endpoints (login and
+// password reset), where an attacker might otherwise guess the short
+// 4-character passkey.
 //
 // The limiter is a fixed-window counter keyed by a caller-supplied string
 // (typically client IP + email). Each key is allowed `limit` attempts per
 // `window`; once exceeded, requests receive HTTP 429 until the window rolls over.
-// State is kept in memory, so it resets on restart and is per-process — adequate
-// for a single API instance. A background sweeper evicts stale keys so memory
-// does not grow unbounded.
+//
+// Two backends are available behind the same store interface:
+//   - New()          — in-memory, per-process (resets on restart; fine for a
+//     single instance or local development).
+//   - NewWithRedis() — shared across instances via Redis, so the limit is a
+//     true global cap behind a load balancer and survives deploys.
 package ratelimit
 
 import (
@@ -22,45 +25,62 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// store is the pluggable backend for the fixed-window counter. allow records one
+// attempt against key and reports whether the request is within the configured
+// limit for the current window.
+type store interface {
+	allow(key string) bool
+}
+
+// Limiter rate-limits requests using a store backend. It is safe for concurrent
+// use (both backends are).
+type Limiter struct {
+	backend store
+}
+
+// New returns a Limiter backed by an in-memory store, allowing `limit` requests
+// per `window` for each key. State is per-process and resets on restart.
+func New(limit int, window time.Duration) *Limiter {
+	return &Limiter{backend: newMemoryStore(limit, window)}
+}
+
+// ── In-memory backend ────────────────────────────────────────────────────────
+
 // counter tracks the number of attempts for one key within the current window.
 type counter struct {
 	count       int
 	windowStart time.Time
 }
 
-// Limiter is a fixed-window, per-key rate limiter safe for concurrent use.
-type Limiter struct {
+type memoryStore struct {
 	mu       sync.Mutex
 	counters map[string]*counter
 	limit    int
 	window   time.Duration
 }
 
-// New returns a Limiter allowing `limit` requests per `window` for each key.
-// It starts a background goroutine that periodically evicts expired entries.
-func New(limit int, window time.Duration) *Limiter {
-	l := &Limiter{
+func newMemoryStore(limit int, window time.Duration) *memoryStore {
+	s := &memoryStore{
 		counters: make(map[string]*counter),
 		limit:    limit,
 		window:   window,
 	}
-	go l.cleanupLoop()
-	return l
+	go s.cleanupLoop()
+	return s
 }
 
-// allow records an attempt for key and reports whether it is within the limit.
-func (l *Limiter) allow(key string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (s *memoryStore) allow(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	now := time.Now()
-	c, ok := l.counters[key]
-	if !ok || now.Sub(c.windowStart) >= l.window {
-		l.counters[key] = &counter{count: 1, windowStart: now}
+	c, ok := s.counters[key]
+	if !ok || now.Sub(c.windowStart) >= s.window {
+		s.counters[key] = &counter{count: 1, windowStart: now}
 		return true
 	}
 
-	if c.count >= l.limit {
+	if c.count >= s.limit {
 		return false
 	}
 	c.count++
@@ -69,18 +89,18 @@ func (l *Limiter) allow(key string) bool {
 
 // cleanupLoop removes counters whose window has fully elapsed. It runs for the
 // lifetime of the process; there is no need to stop it in this application.
-func (l *Limiter) cleanupLoop() {
-	ticker := time.NewTicker(l.window)
+func (s *memoryStore) cleanupLoop() {
+	ticker := time.NewTicker(s.window)
 	defer ticker.Stop()
 	for range ticker.C {
 		now := time.Now()
-		l.mu.Lock()
-		for key, c := range l.counters {
-			if now.Sub(c.windowStart) >= l.window {
-				delete(l.counters, key)
+		s.mu.Lock()
+		for key, c := range s.counters {
+			if now.Sub(c.windowStart) >= s.window {
+				delete(s.counters, key)
 			}
 		}
-		l.mu.Unlock()
+		s.mu.Unlock()
 	}
 }
 
@@ -107,7 +127,7 @@ func (l *Limiter) Middleware(keysFunc func(c *gin.Context) []string) gin.Handler
 		// attempt, which is the conservative choice for abuse tracking.
 		blocked := false
 		for _, k := range keys {
-			if !l.allow(k) {
+			if !l.backend.allow(k) {
 				blocked = true
 			}
 		}
