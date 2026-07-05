@@ -3,8 +3,6 @@
 package routes
 
 import (
-	"time"
-
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/nimbus/api/handlers/user"
@@ -13,13 +11,11 @@ import (
 )
 
 // InitUserRoutes registers the authentication endpoints under /v1/api/auth/.
-func InitUserRoutes(r *gin.Engine, db *gorm.DB, s3Client *s3.Client) {
+// authLimiter throttles credential-guessing on login and password reset (keyed
+// by client IP + email); it is built in the bootstrap so it can be Redis-backed
+// (shared across instances) or in-memory depending on configuration.
+func InitUserRoutes(r *gin.Engine, db *gorm.DB, s3Client *s3.Client, authLimiter *ratelimit.Limiter) {
 	r.GET("/register", user.ServeRegisterPage)
-
-	// Throttle credential-guessing on login and password reset: 5 attempts per
-	// 15 minutes, keyed by client IP + email so a single account can't be
-	// hammered even from rotating IPs.
-	authLimiter := ratelimit.New(5, 15*time.Minute)
 
 	route := r.Group("v1/api/auth/")
 	{
