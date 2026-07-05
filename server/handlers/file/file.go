@@ -109,12 +109,15 @@ func PresignUpload(h s3db.Config, db *gorm.DB, c *gin.Context) {
 		return
 	}
 
-	// Best-effort UX pre-check: reject obviously oversized uploads before we bother
-	// generating a presigned URL. Note this trusts the client-supplied size and is
-	// NOT a hard enforcement — because the upload goes directly to S3, the real cap
-	// must be enforced by a content-length condition on the presigned URL (TODO).
+	// The client declares the upload size up front. We validate it here and then
+	// bind it into the presigned URL's signature (below), so S3 enforces the exact
+	// size — a client can't request a small size and then push a larger object.
 	var fileSize int64
 	fmt.Sscanf(c.Query("size"), "%d", &fileSize)
+	if fileSize <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "a positive file size is required"})
+		return
+	}
 	if fileSize > maxUploadSize {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file size must be 50MB or less"})
 		return
@@ -152,7 +155,7 @@ func PresignUpload(h s3db.Config, db *gorm.DB, c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	url, err := s3db.PresignPutObject(ctx, h.Client, h.Bucket, s3Key, contentType, presignExpiry)
+	url, err := s3db.PresignPutObject(ctx, h.Client, h.Bucket, s3Key, contentType, fileSize, presignExpiry)
 	if err != nil {
 		db.Delete(fileModel)
 		log.Printf("[PRESIGN-UPLOAD] Presign failed - user_id: %d, key: %s, error: %v", user.ID, s3Key, err)

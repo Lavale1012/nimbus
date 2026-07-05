@@ -11,13 +11,23 @@ import (
 // S3 key. The CLI uses this URL to upload a file directly to S3 without
 // sending the file data through the API server first — saving bandwidth and
 // compute on the server side.
-func PresignPutObject(ctx context.Context, client *s3.Client, bucket, key, contentType string, expiry time.Duration) (string, error) {
+//
+// contentLength binds the exact Content-Length into the signature: S3 rejects
+// any upload whose Content-Length header doesn't match the signed value. This
+// makes the server-side size cap real — a client can't be issued a URL for a
+// small size and then push a much larger object through it. Pass 0 to skip
+// binding the length (not recommended for user uploads).
+func PresignPutObject(ctx context.Context, client *s3.Client, bucket, key, contentType string, contentLength int64, expiry time.Duration) (string, error) {
 	presigner := s3.NewPresignClient(client)
-	req, err := presigner.PresignPutObject(ctx, &s3.PutObjectInput{
+	input := &s3.PutObjectInput{
 		Bucket:      &bucket,
 		Key:         &key,
 		ContentType: &contentType,
-	}, s3.WithPresignExpires(expiry))
+	}
+	if contentLength > 0 {
+		input.ContentLength = &contentLength
+	}
+	req, err := presigner.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", err
 	}
