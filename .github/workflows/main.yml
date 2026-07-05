@@ -94,14 +94,18 @@ jobs:
         if: matrix.module == 'server'
         working-directory: server
         env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-please-override-in-prod-0123456789' }}
+          # Tests use a dedicated >=32-byte value, never the production repo
+          # secret — the suite must not depend on a real secret's strength.
+          JWT_SECRET: "ci-test-only-jwt-secret-0123456789-abcdefghij"
         run: go test -race ./middleware/...
 
       - name: Test (server, full suite without race)
         if: matrix.module == 'server'
         working-directory: server
         env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-please-override-in-prod-0123456789' }}
+          # Tests use a dedicated >=32-byte value, never the production repo
+          # secret — the suite must not depend on a real secret's strength.
+          JWT_SECRET: "ci-test-only-jwt-secret-0123456789-abcdefghij"
         run: go test -timeout 8m -coverprofile=coverage.out ./...
 
   # ── Build binaries ───────────────────────────────────────────────────────

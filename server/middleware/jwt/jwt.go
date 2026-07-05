@@ -17,12 +17,21 @@ import (
 
 var secretKey []byte
 
+// MIN_SECRET_BYTES is the minimum accepted JWT_SECRET length. For HS256 the
+// secret is the entire security of authentication, so we require at least 32
+// bytes (256 bits) of key material. Longer secrets are fine and encouraged.
+const MIN_SECRET_BYTES int = 32
+
 func init() {
 	secret, err := utils.GetEnv("JWT_SECRET")
 	if err != nil {
 		panic("JWT_SECRET is not set: " + err.Error())
 	}
 	secretKey = []byte(secret)
+
+	if len(secretKey) < MIN_SECRET_BYTES {
+		panic(fmt.Sprintf("JWT_SECRET must be at least %d bytes long (got %d)", MIN_SECRET_BYTES, len(secretKey)))
+	}
 }
 
 // CreateToken issues a signed JWT for the given email and userID.

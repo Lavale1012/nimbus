@@ -57,7 +57,7 @@ func loginRouter(db *gorm.DB) *gin.Engine {
 }
 
 func TestLogin_Success(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("JWT_SECRET", "test-secret-key-0123456789-abcdefghij")
 	db := setupLoginDB(t)
 	seedLoginUser(t, db, "login@example.com", "Test123!@#")
 	r := loginRouter(db)
@@ -147,7 +147,7 @@ func TestLogin_InvalidEmailFormat(t *testing.T) {
 }
 
 func TestLogin_ReturnsBoxes(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("JWT_SECRET", "test-secret-key-0123456789-abcdefghij")
 	db := setupLoginDB(t)
 	seedLoginUser(t, db, "boxes@example.com", "Test123!@#")
 	r := loginRouter(db)

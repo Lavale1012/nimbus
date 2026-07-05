@@ -1,0 +1,24 @@
+# gitleaks configuration for Nimbus.
+#
+# Extends the built-in ruleset (so all default secret detection stays active) and
+# adds a narrow allowlist for known-safe test fixtures. The only "secrets" here
+# are dummy JWT_SECRET values used to satisfy the server's startup validation in
+# unit tests and CI — they authenticate nothing and are not sensitive.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow dummy JWT secrets used only in tests / CI"
+
+# Ignore JWT_SECRET assignments in Go test files (t.Setenv("JWT_SECRET", "...")).
+regexTarget = "line"
+regexes = [
+  '''(?i)JWT_SECRET.*(test|ci-test|ci-test-only)[^"']*''',
+]
+
+# Restrict the above to test files and the CI workflow so real code is still
+# fully scanned.
+paths = [
+  '''.*_test\.go$''',
+  '''\.github/workflows/.*\.ya?ml$''',
+]

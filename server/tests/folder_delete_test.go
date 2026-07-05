@@ -53,7 +53,7 @@ func createFolderDeleteUser(t *testing.T, db *gorm.DB) (*models.User, *models.Bo
 // authHeader generates a valid Bearer token for the given user.
 func authHeader(t *testing.T, u *models.User) string {
 	t.Helper()
-	t.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("JWT_SECRET", "test-secret-key-0123456789-abcdefghij")
 	token, err := jwt.CreateToken(u.Email, fmt.Sprintf("%d", u.ID))
 	if err != nil {
 		t.Fatalf("failed to create token: %v", err)
