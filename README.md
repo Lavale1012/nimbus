@@ -80,29 +80,9 @@ The production environment is defined entirely as code with Terraform — modula
 reproducible, and version-controlled. State is stored in an **S3 backend with
 DynamoDB locking** so infrastructure changes are safe to apply as a team.
 
-```text
-                          Internet
-                             │
-                    ┌────────▼─────────┐
-                    │  ALB (public)    │   2 public subnets, 2 AZs
-                    └────────┬─────────┘
-        ┌────────────────────┼────────────────────┐
-        │            VPC 10.0.0.0/16               │
-        │                    │ :8080               │
-        │        ┌───────────▼───────────┐         │
-        │        │ ECS Fargate service    │  2 tasks, 2 private subnets (HA)
-        │        │ (Go API, no public IP) │  outbound via NAT Gateway
-        │        └───────┬────────┬───────┘         │
-        │                │        │                 │
-        │      ┌─────────▼──┐  ┌──▼──────────┐      │
-        │      │ RDS Postgres│  │ S3 (files)  │      │
-        │      │ private only│  └─────────────┘      │
-        │      └─────────────┘                       │
-        └────────────────────────────────────────────┘
-                             │
-                  CloudWatch alarms → SNS email
-             (ECS CPU · RDS CPU · ALB 5XX error rate)
-```
+<p align="center">
+  <img src="readmeImages/aws-architecture.jpeg" alt="Nimbus AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
+</p>
 
 **What's provisioned** (four Terraform modules: `networking`, `compute`,
 `database`, `monitoring`):
