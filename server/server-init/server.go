@@ -19,6 +19,7 @@ import (
 
 	"github.com/nimbus/api/db/postgres"
 	s3db "github.com/nimbus/api/db/s3"
+	"github.com/nimbus/api/middleware/bodylimit"
 	"github.com/nimbus/api/routes"
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
@@ -46,6 +47,11 @@ func InitServer() error {
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+
+	// Cap request body size so a client can't force the server to buffer an
+	// arbitrarily large body. File uploads bypass this (they go straight to S3
+	// via presigned URLs), so a small JSON-sized limit is safe for every route.
+	r.Use(bodylimit.Middleware(bodylimit.DefaultMaxBytes))
 
 	// Trust ALB and private RFC-1918 ranges so X-Forwarded-For gives real client IPs.
 	// In LOCAL_DEV mode trust all proxies since there's no ALB in docker-compose.

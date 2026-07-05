@@ -16,7 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const presignExpiry = 15 * time.Minute
+const (
+	presignExpiry = 15 * time.Minute
+	maxUploadSize = 50 * 1024 * 1024
+)
 
 func PresignDownload(d s3db.Config, c *gin.Context, db *gorm.DB) {
 	startTime := time.Now()
@@ -106,8 +109,16 @@ func PresignUpload(h s3db.Config, db *gorm.DB, c *gin.Context) {
 		return
 	}
 
+	// Best-effort UX pre-check: reject obviously oversized uploads before we bother
+	// generating a presigned URL. Note this trusts the client-supplied size and is
+	// NOT a hard enforcement — because the upload goes directly to S3, the real cap
+	// must be enforced by a content-length condition on the presigned URL (TODO).
 	var fileSize int64
 	fmt.Sscanf(c.Query("size"), "%d", &fileSize)
+	if fileSize > maxUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file size must be 50MB or less"})
+		return
+	}
 
 	box, err := helpers.ValidateBoxOwnership(db, boxName, user.ID)
 	if err != nil {
