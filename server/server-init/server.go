@@ -31,6 +31,40 @@ import (
 var S3 *s3.Client
 var DB *gorm.DB
 
+// resolveCORS decides the CORS policy from LOCAL_DEV and the CORS_ORIGINS value:
+//   - localDev true            -> allow all origins ("*"), no credentials.
+//   - CORS_ORIGINS set         -> that explicit allowlist, credentials enabled.
+//   - otherwise (prod, unset)  -> enabled=false: caller registers no CORS
+//     middleware, so cross-origin requests are denied by default rather than
+//     silently allowed via "*".
+//
+// It returns the origin list, whether to allow credentials, and whether CORS
+// middleware should be registered at all.
+func resolveCORS(localDev bool, corsOrigins string) (origins []string, allowCredentials bool, enabled bool) {
+	switch {
+	case localDev:
+		return []string{"*"}, false, true
+	case corsOrigins != "":
+		return strings.Split(corsOrigins, ","), true, true
+	default:
+		return nil, false, false
+	}
+}
+
+// corsConfig builds the CORS middleware config for the given origin allowlist.
+// allowCredentials is only enabled for an explicit allowlist (never with "*",
+// which the spec forbids combining with credentials).
+func corsConfig(origins []string, allowCredentials bool) cors.Config {
+	return cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: allowCredentials,
+		MaxAge:           12 * time.Hour,
+	}
+}
+
 // InitServer bootstraps the entire API:
 //  1. Reads required environment variables
 //  2. Creates the Gin router with logging, recovery, and CORS middleware
@@ -55,30 +89,28 @@ func InitServer() error {
 	// via presigned URLs), so a small JSON-sized limit is safe for every route.
 	r.Use(bodylimit.Middleware(bodylimit.DefaultMaxBytes))
 
+	// LOCAL_DEV relaxes proxy trust and CORS for local development. In every other
+	// environment the server is expected to run behind the ALB with an explicit
+	// origin allowlist.
+	localDev, _ := utils.GetEnv("LOCAL_DEV")
+
 	// Trust ALB and private RFC-1918 ranges so X-Forwarded-For gives real client IPs.
 	// In LOCAL_DEV mode trust all proxies since there's no ALB in docker-compose.
-	localDev, _ := utils.GetEnv("LOCAL_DEV")
 	if localDev == "true" {
 		r.SetTrustedProxies(nil)
 	} else {
 		r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
 	}
 
-	// CORS: allow all origins by default; restrict to a comma-separated list
-	// when CORS_ORIGINS is set (e.g. "https://app.example.com").
+	// CORS origin policy (see resolveCORS). When enabled is false we register no
+	// CORS middleware at all, so browsers block cross-origin requests by default.
 	corsOrigins, _ := utils.GetEnv("CORS_ORIGINS")
-	origins := []string{"*"}
-	if corsOrigins != "" {
-		origins = strings.Split(corsOrigins, ",")
+	origins, allowCredentials, enabled := resolveCORS(localDev == "true", corsOrigins)
+	if enabled {
+		r.Use(cors.New(corsConfig(origins, allowCredentials)))
+	} else {
+		log.Println("CORS: no CORS_ORIGINS set outside LOCAL_DEV — cross-origin requests are denied (no CORS middleware registered)")
 	}
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     origins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: corsOrigins != "",
-		MaxAge:           12 * time.Hour,
-	}))
 
 	ctx := context.Background()
 
