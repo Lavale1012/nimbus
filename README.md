@@ -104,7 +104,7 @@ DynamoDB locking** so changes are safe to apply as a team.
 > **[Lavale1012/aws-cloud-suite](https://github.com/Lavale1012/aws-cloud-suite)**
 
 <p align="center">
-  <img src="readmeImages/aws-architecture.jpeg" alt="Nimbus AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
+  <img src="readmeImages/aws-architecture1.jpeg" alt="Nimbus AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
 </p>
 
 | Layer | Resources |
