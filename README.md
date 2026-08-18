@@ -9,7 +9,6 @@
 <p align="center">
   <a href="#project-status"><img src="https://img.shields.io/badge/status-active%20development-yellow" alt="status"></a>
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go" alt="Go 1.26+">
-  <a href=".github/workflows/main.yml"><img src="https://github.com/Lavale1012/nimbus/actions/workflows/main.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/AWS-ECS%20Fargate%20%7C%20RDS%20%7C%20S3-FF9900?logo=amazon-aws&logoColor=white" alt="AWS">
   <img src="https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white" alt="Terraform">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
