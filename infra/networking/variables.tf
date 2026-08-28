@@ -87,9 +87,26 @@ variable "https_port" {
   description = "Port the load balancer terminates TLS on."
 }
 
+variable "alb_log_retention_days" {
+  type        = number
+  default     = 90
+  description = "Days to keep ALB access logs before expiring them. Logs accumulate forever otherwise."
+
+  validation {
+    condition     = var.alb_log_retention_days > 0
+    error_message = "alb_log_retention_days must be greater than zero."
+  }
+}
+
+variable "alb_logs_force_destroy" {
+  type        = bool
+  default     = false
+  description = "Allow the access log bucket to be destroyed while it still holds objects. Leave false outside throwaway environments; a terraform destroy will otherwise fail on the non-empty bucket."
+}
+
 variable "domain_name" {
   type        = string
-  description = "Domain name for the ACM certificate."
+  description = "Domain name for the ACM certificate, and the name pointed at the load balancer."
 }
 
 variable "hosted_zone_name" {

@@ -1,7 +1,21 @@
+# Baseline tags every resource in this module carries, overridable per-caller
+# via var.tags. Defined once so the ALB and the log bucket can't drift from
+# the VPC the way hardcoded tags did.
+locals {
+  tags = merge(
+    {
+      Terraform   = "true"
+      Environment = var.environment
+    },
+    var.tags,
+  )
+}
+
 # Network foundation: VPC, subnets across two AZs, and the gateways that
 # connect them to the internet.
 module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 6.7.0"
 
   name = var.app_name
   cidr = var.vpc_cidr
@@ -21,19 +35,58 @@ module "vpc" {
   enable_vpn_gateway     = var.enable_vpn_gateway
   create_igw             = var.igw # inbound internet for public subnets
 
-  # Baseline tags, overridable per-caller via var.tags.
-  tags = merge(
+  tags = local.tags
+}
+
+# Destination for ALB access logs. The load balancer cannot be created until
+# this bucket exists AND carries a policy letting the log delivery service
+# write to it — AWS verifies delivery up front and fails the create otherwise.
+module "alb_logs" {
+  source  = "terraform-aws-modules/s3-bucket/aws"
+  version = "~> 5.15.0"
+
+  bucket = "${var.app_name}-alb-logs"
+
+  # Writes the log-delivery policy for ALB/NLB. The correct principal differs
+  # by region age, so this is left to the module rather than hand-rolled.
+  attach_lb_log_delivery_policy = true
+
+  # The module blocks all public access by default, so that is left alone.
+  force_destroy = var.alb_logs_force_destroy
+
+  # ALB access logs support SSE-S3 only, not a customer-managed KMS key.
+  server_side_encryption_configuration = {
+    rule = {
+      apply_server_side_encryption_by_default = {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+
+  # Access logs accumulate forever by default; this is a bill that grows for
+  # data nobody reads past the incident it was needed for.
+  lifecycle_rule = [
     {
-      Terraform   = "true"
-      Environment = var.environment
-    },
-    var.tags,
-  )
+      id      = "expire-access-logs"
+      enabled = true
+      expiration = {
+        days = var.alb_log_retention_days
+      }
+    }
+  ]
+
+  tags = local.tags
 }
 
 # Public-facing load balancer. Terminates TLS and forwards to ECS tasks.
 module "alb" {
-  source = "terraform-aws-modules/alb/aws"
+  source  = "terraform-aws-modules/alb/aws"
+  version = "~> 10.5.0"
+
+  # s3_bucket_id resolves from the bucket, not the bucket policy, so referencing
+  # it alone would let Terraform build the ALB before the policy is attached and
+  # fail intermittently. Depending on the whole module waits for both.
+  depends_on = [module.alb_logs]
 
   name    = "${var.app_name}-alb"
   vpc_id  = module.vpc.vpc_id
@@ -67,9 +120,9 @@ module "alb" {
     }
   }
 
-  # Bucket must already exist and grant write access to the ELB service.
   access_logs = {
-    bucket = "${var.app_name}-alb-logs"
+    enabled = true
+    bucket  = module.alb_logs.s3_bucket_id
   }
 
   listeners = {
@@ -120,10 +173,7 @@ module "alb" {
     }
   }
 
-  tags = {
-    Environment = "Development"
-    Project     = "Example"
-  }
+  tags = local.tags
 }
 
 # TLS certificate for the HTTPS listener. Issued in PENDING_VALIDATION and
@@ -166,4 +216,42 @@ resource "aws_route53_record" "cert_validation" {
 resource "aws_acm_certificate_validation" "this" {
   certificate_arn         = aws_acm_certificate.this.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# Points the domain at the load balancer. The certificate above only proves
+# ownership of the name; without this record the name resolves nowhere.
+#
+# Deliberately a second, separate call rather than folding the validation
+# records above into this one: those records gate the certificate, the
+# certificate gates the HTTPS listener, and this record reads the ALB those
+# listeners belong to. One module holding both halves would close that chain
+# into a dependency cycle Terraform refuses to plan.
+module "dns_alias" {
+  source  = "terraform-aws-modules/route53/aws"
+  version = "~> 6.5.0"
+
+  # Look up the existing zone instead of creating one; the domain predates
+  # this infrastructure and a destroy here must not be able to take it down.
+  create_zone = false
+  name        = var.hosted_zone_name
+
+  records = {
+    alb = {
+      # full_name is used verbatim. Without it the map key would be treated as
+      # a subdomain prefix, which breaks when domain_name is the zone apex.
+      full_name = var.domain_name
+      type      = "A"
+
+      # An alias, not a CNAME: a zone apex cannot hold a CNAME, and Route53
+      # answers alias queries for free.
+      alias = {
+        name    = module.alb.dns_name
+        zone_id = module.alb.zone_id
+        # Pulls the record when every target is failing health checks.
+        evaluate_target_health = true
+      }
+    }
+  }
+
+  tags = local.tags
 }

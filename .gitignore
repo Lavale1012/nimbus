@@ -141,7 +141,9 @@ localstack_data/
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
+# .terraform.lock.hcl is deliberately NOT ignored: it pins provider versions
+# so every machine and CI run resolves the same ones. Committing it is the
+# point of the lock.
 
 # AWS
 .aws/
