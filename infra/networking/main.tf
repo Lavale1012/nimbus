@@ -13,9 +13,13 @@ module "vpc" {
   public_subnets  = var.public_subnets
 
   enable_nat_gateway = var.enable_nat_gateway # outbound internet for private subnets
-  single_nat_gateway = var.single_nat_gateway # one shared NAT instead of one per AZ
-  enable_vpn_gateway = var.enable_vpn_gateway
-  create_igw         = var.igw # inbound internet for public subnets
+  # One shared NAT, landing in the first public subnet (azs[0]). Every private
+  # route table points at it, so that AZ going down cuts outbound for both.
+  single_nat_gateway = var.single_nat_gateway
+  # Set instead of single_nat_gateway to get a NAT per AZ; the two conflict.
+  one_nat_gateway_per_az = var.one_nat_gateway_per_az
+  enable_vpn_gateway     = var.enable_vpn_gateway
+  create_igw             = var.igw # inbound internet for public subnets
 
   # Baseline tags, overridable per-caller via var.tags.
   tags = merge(
@@ -40,15 +44,15 @@ module "alb" {
   # renaming one destroys and recreates that rule.
   security_group_ingress_rules = {
     all_http = {
-      from_port   = 80
-      to_port     = 80
+      from_port   = var.http_port
+      to_port     = var.http_port
       ip_protocol = "tcp"
       description = "HTTP web traffic"
       cidr_ipv4   = var.alb_ingress_cidr_ipv4
     }
     all_https = {
-      from_port   = 443
-      to_port     = 443
+      from_port   = var.https_port
+      to_port     = var.https_port
       ip_protocol = "tcp"
       description = "HTTPS web traffic"
       cidr_ipv4   = var.alb_ingress_cidr_ipv4
@@ -71,17 +75,17 @@ module "alb" {
   listeners = {
     # Port 80 never reaches the app; it just bounces clients to HTTPS.
     http-https-redirect = {
-      port     = 80
+      port     = var.http_port
       protocol = "HTTP"
       redirect = {
-        port        = "443"
+        port        = tostring(var.https_port) # redirect target is a string, unlike port above
         protocol    = "HTTPS"
-        status_code = "HTTP_301" # permanent, so browsers stop retrying port 80
+        status_code = "HTTP_301" # permanent, so browsers stop retrying the HTTP port
       }
     }
     # TLS terminates here, then plaintext to the target group.
     https = {
-      port            = 443
+      port            = var.https_port
       protocol        = "HTTPS"
       certificate_arn = aws_acm_certificate_validation.this.certificate_arn
 
@@ -162,103 +166,4 @@ resource "aws_route53_record" "cert_validation" {
 resource "aws_acm_certificate_validation" "this" {
   certificate_arn         = aws_acm_certificate.this.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
-}
-
-module "api_gateway" {
-  source = "terraform-aws-modules/apigateway-v2/aws"
-
-  name          = "${var.app_name}-api-gateway"
-  description   = "My awesome HTTP API Gateway"
-  protocol_type = "HTTP"
-
-  cors_configuration = {
-    allow_headers = ["content-type", "x-amz-date", "authorization", "x-api-key", "x-amz-security-token", "x-amz-user-agent"]
-    allow_methods = ["*"]
-    allow_origins = ["*"]
-  }
-
-  # Custom domain
-  domain_name = "terraform-aws-modules.modules.tf"
-
-  # Access logs
-  stage_access_log_settings = {
-    create_log_group            = true
-    log_group_retention_in_days = 7
-    format = jsonencode({
-      context = {
-        domainName              = "$context.domainName"
-        integrationErrorMessage = "$context.integrationErrorMessage"
-        protocol                = "$context.protocol"
-        requestId               = "$context.requestId"
-        requestTime             = "$context.requestTime"
-        responseLength          = "$context.responseLength"
-        routeKey                = "$context.routeKey"
-        stage                   = "$context.stage"
-        status                  = "$context.status"
-        error = {
-          message      = "$context.error.message"
-          responseType = "$context.error.responseType"
-        }
-        identity = {
-          sourceIP = "$context.identity.sourceIp"
-        }
-        integration = {
-          error             = "$context.integration.error"
-          integrationStatus = "$context.integration.integrationStatus"
-        }
-      }
-    })
-  }
-
-  # Authorizer(s)
-  authorizers = {
-    "azure" = {
-      authorizer_type  = "JWT"
-      identity_sources = ["$request.header.Authorization"]
-      name             = "azure-auth"
-      jwt_configuration = {
-        audience = ["d6a38afd-45d6-4874-d1aa-3c5c558aqcc2"]
-        issuer   = "https://sts.windows.net/aaee026e-8f37-410e-8869-72d9154873e4/"
-      }
-    }
-  }
-
-  # Routes & Integration(s)
-  routes = {
-    "POST /" = {
-      integration = {
-        uri                    = "arn:aws:lambda:eu-west-1:052235179155:function:my-function"
-        payload_format_version = "2.0"
-        timeout_milliseconds   = 12000
-      }
-    }
-
-    "GET /some-route-with-authorizer" = {
-      authorizer_key = "azure"
-
-      integration = {
-        type = "HTTP_PROXY"
-        uri  = "some url"
-      }
-    }
-
-    "GET /some-route-with-iam" = {
-      authorization_type = "AWS_IAM"
-
-      integration = {
-        uri = "arn:aws:lambda:eu-west-1:052235179155:function:my-function"
-      }
-    }
-
-    "$default" = {
-      integration = {
-        uri = "arn:aws:lambda:eu-west-1:052235179155:function:my-default-function"
-      }
-    }
-  }
-
-  tags = {
-    Environment = "dev"
-    Terraform   = "true"
-  }
 }

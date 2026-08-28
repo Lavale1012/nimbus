@@ -38,6 +38,18 @@ variable "single_nat_gateway" {
   description = "Share a single NAT gateway across all AZs instead of one per AZ."
 }
 
+variable "one_nat_gateway_per_az" {
+  type        = bool
+  default     = false
+  description = "Place one NAT gateway in each AZ's public subnet, so a zone's outbound traffic never crosses zones. Requires at least as many public subnets as AZs. Has no effect when single_nat_gateway is true."
+
+  validation {
+    condition     = !(var.single_nat_gateway && var.one_nat_gateway_per_az)
+    error_message = "single_nat_gateway and one_nat_gateway_per_az are mutually exclusive; single_nat_gateway wins silently, so set it to false to get one NAT per AZ."
+  }
+  # Also guards against paying for per-AZ NAT gateways that were never created.
+}
+
 variable "enable_vpn_gateway" {
   type        = bool
   description = "Provision a VPN gateway for the VPC."
@@ -61,6 +73,18 @@ variable "alb_ingress_cidr_ipv4" {
 variable "alb_egress_cidr_ipv4" {
   type        = string
   description = "IPv4 CIDR the load balancer may send traffic to. Normally the VPC CIDR, so the ALB can only reach its targets."
+}
+
+variable "http_port" {
+  type        = number
+  default     = 80
+  description = "Port the load balancer accepts plain HTTP on, before redirecting to HTTPS."
+}
+
+variable "https_port" {
+  type        = number
+  default     = 443
+  description = "Port the load balancer terminates TLS on."
 }
 
 variable "domain_name" {
