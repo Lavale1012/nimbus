@@ -3,7 +3,7 @@
 <p align="center">
   <strong>A cloud file-storage platform you drive entirely from your terminal.</strong><br>
   Go CLI + REST API · direct-to-S3 transfers · PostgreSQL metadata · Redis sessions ·
-  containerized and deployed on AWS ECS Fargate via Terraform.
+  containerized, with AWS infrastructure defined as Terraform IaC.
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@ with the trade-offs made deliberately rather than by accident.
 | --- | --- |
 | **Distributed systems** | Stateless API; file bytes bypass the server entirely via presigned S3 URLs; metadata in PostgreSQL kept in sync with object storage |
 | **Security engineering** | Bcrypt (cost 14), JWT with `alg:none` rejection, per-IP + per-email rate limiting, timing-attack-resistant auth, passkey-based password reset, non-sequential IDs, per-request ownership checks |
-| **Cloud infrastructure** | Full AWS stack as Terraform IaC — VPC across 2 AZs, ECS Fargate (HA), ALB, RDS PostgreSQL, ECR, NAT Gateway, CloudWatch + SNS alarms, S3-backed remote state with DynamoDB locking |
+| **Cloud infrastructure** | AWS network foundation as Terraform IaC — VPC across 2 AZs, public/private subnets, NAT, ALB terminating TLS, ACM certificates DNS-validated automatically; compute, database, and monitoring layers designed and documented ([walkthrough](infra/README.md)) |
 | **CI/CD & quality** | GitHub Actions pipeline gating every PR: lint, race-tested units, build, dependency-CVE scan, secret scan — with branch protection ([overview](.github/workflows/README.md) · [deep dive](.github/CICD.md)) |
 | **Developer experience** | Filesystem-style commands (`cd`, `ls`, `pwd`), live progress bars and spinners, Docker Compose for a one-command local stack |
 
@@ -76,32 +76,38 @@ commands, which is what lets the API stay fully stateless.
 
 ## Infrastructure (AWS, as Terraform IaC)
 
-The production environment is defined entirely as code with Terraform — modular,
-reproducible, and version-controlled. State is stored in an **S3 backend with
-DynamoDB locking** so infrastructure changes are safe to apply as a team.
+The AWS environment is defined as code with Terraform — modular, reproducible, and
+version-controlled. The **networking foundation is built**; the compute, database, and
+monitoring layers are designed and documented but not yet applied.
+
+📖 **[Full walkthrough of the infrastructure and the decisions behind it →](infra/README.md)**
 
 <p align="center">
-  <img src="readmeImages/aws-architecture.jpeg" alt="Nimbus AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
+  <img src="readmeImages/aws-architecture.jpeg" alt="Nimbus target AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
 </p>
 
-**What's provisioned** (four Terraform modules: `networking`, `compute`,
-`database`, `monitoring`):
+**The four Terraform modules** — `networking`, `compute`, `database`, `monitoring`:
 
-| Layer | Resources |
-| --- | --- |
-| **Networking** | VPC (`10.0.0.0/16`), 2 public + 2 private subnets across 2 AZs, Internet Gateway, NAT Gateway + Elastic IP, route tables |
-| **Compute** | ECS Fargate cluster running **2 API tasks** for high availability (private subnets, no public IPs), Application Load Balancer, ECR image registry, IAM task-execution role, tiered security groups |
-| **Database** | RDS PostgreSQL 15, private DB subnet group, security group locked to **ECS traffic only**, SSL required |
-| **Monitoring** | CloudWatch alarms on ECS CPU, RDS CPU, and ALB 5XX rate → SNS email notifications; 7-day container log retention |
+| Layer | Resources | Status |
+| --- | --- | --- |
+| **Networking** | VPC (`10.0.0.0/16`), 2 public + 2 private subnets across 2 AZs, Internet Gateway, NAT Gateway, route tables, Application Load Balancer with HTTP→HTTPS redirect, ACM certificate DNS-validated through Route53 | **Built** |
+| **Compute** | ECS Fargate cluster running **2 API tasks** for high availability (private subnets, no public IPs), ECR image registry, IAM task-execution role, tiered security groups | Planned |
+| **Database** | RDS PostgreSQL, private DB subnet group, security group locked to **ECS traffic only**, SSL required | Planned |
+| **Monitoring** | CloudWatch alarms on ALB 5XX rate, ECS CPU, and RDS CPU → SNS email notifications; finite container log retention | Planned |
 
-**Security posture baked into the network:** the API tasks have **no public IP**
-and live in private subnets — the only inbound path is `Internet → ALB → ECS on
-:8080`, and the database only accepts connections from the ECS security group.
-Outbound access (e.g. pulling container images) is routed through a NAT Gateway.
+**Security posture baked into the network:** API tasks get **no public IP** and live in
+private subnets — the only inbound path is `Internet → ALB → ECS on :8080`, and the
+database will accept connections from the ECS security group alone. Outbound access
+(e.g. pulling container images) routes through a NAT Gateway. That boundary isn't a
+firewall rule someone can loosen — private subnets simply have no route to the internet.
 
-> Deploy flow: build the API image → push to **ECR** → ECS Fargate rolls out the
-> new task definition behind the ALB, which health-checks `/health` before
-> routing traffic.
+The ALB health-checks `/health`, which pings **both** PostgreSQL and S3 and returns `503`
+if either is down, so a task that can't serve requests removes itself from rotation
+instead of failing them.
+
+> Target deploy flow: build the API image → push to **ECR** → ECS Fargate rolls out the
+> new task definition behind the ALB, which health-checks `/health` before routing
+> traffic.
 
 ---
 
@@ -197,7 +203,8 @@ docker compose up -d
 # S3_ENDPOINT=http://localhost:4566          # read by the AWS SDK for LocalStack
 # S3_FORCE_PATH_STYLE=true                    # read by the AWS SDK for LocalStack
 # JWT_SECRET=your-secret-key                  # required; use a long random value
-# CORS_ORIGINS=http://localhost:3000          # optional; wildcard "*" if unset
+# CORS_ORIGINS=http://localhost:3000          # optional; LOCAL_DEV allows all origins,
+#                                             # prod denies cross-origin unless this is set
 
 # 3. Start the API server (listens on :8080)
 cd server && go run main.go
@@ -218,8 +225,8 @@ cd client && go build -o nim cli/main.go
 | Database | PostgreSQL · GORM (RDS in production) |
 | File Storage | AWS S3 · LocalStack for local dev (presigned URLs) |
 | Session Cache | Redis |
-| Compute | AWS ECS Fargate (2 tasks, HA) behind an ALB |
-| Infrastructure | Terraform (VPC, Fargate, RDS, ECR, NAT, CloudWatch, SNS) · S3 + DynamoDB remote state |
+| Compute | AWS ECS Fargate (2 tasks, HA) behind an ALB — *planned* |
+| Infrastructure | Terraform — VPC, NAT, ALB, ACM (built) · Fargate, RDS, CloudWatch (planned) |
 | CI/CD | GitHub Actions — lint, race-tested tests, build, govulncheck, gitleaks |
 | Local Dev | Docker Compose (PostgreSQL + LocalStack S3) |
 
@@ -242,11 +249,15 @@ Done:
 - Live progress bars and spinners on all CLI commands
 - Comprehensive server-side tests (handlers, auth, file ops, box ops)
 - ALB-ready server — trusted proxy headers, CORS config, HTTP timeouts
-- Production AWS infrastructure as Terraform IaC (ECS Fargate, RDS, ALB, VPC, monitoring)
+- AWS networking foundation as Terraform IaC — VPC across 2 AZs, NAT, ALB, automatic TLS
+  ([walkthrough](infra/README.md))
 - CI/CD pipeline gating every PR (see [.github/workflows/README.md](.github/workflows/README.md))
 
 Planned:
 
+- Compute, database, and monitoring Terraform modules — designed and documented in the
+  [infrastructure walkthrough](infra/README.md), not yet applied
+- S3 + DynamoDB remote state backend
 - File versioning
 - Sharing and collaboration
 - Cross-platform build scripts and releases
