@@ -6,14 +6,16 @@ layer, explaining what it builds, why I built it that way, and what the choice b
 | § | Layer | Status |
 | --- | --- | --- |
 | [1](#1--networking) | **Networking** — VPC, subnets, NAT, ALB, TLS | **Built** |
-| [2](#2--compute) | **Compute** — ECS Fargate, ECR, task definition | Planned |
-| [3](#3--database) | **Database** — RDS PostgreSQL | Planned |
-| [4](#4--monitoring) | **Monitoring** — CloudWatch, SNS | Planned |
-| [5](#5--cross-cutting) | **Cross-cutting** — state, tagging, secrets | Partly built |
+| [2](#2--ecr) | **ECR** — image registry, lifecycle policy | **Built** |
+| [3](#3--compute) | **Compute** — ECS Fargate cluster, service, task definition | **Built** |
+| [4](#4--database) | **Database** — RDS PostgreSQL | Planned |
+| [5](#5--monitoring) | **Monitoring** — CloudWatch, SNS | Planned |
+| [6](#6--cross-cutting) | **Cross-cutting** — state, tagging, secrets | Partly built |
 
-Only Networking is built today. The rest are documented with the decisions already made
-and what they attach to — I'd rather ship a deliberate foundation than a broad `apply`
-that works by accident.
+Networking, ECR, and Compute are built — the path from an image in a registry to a task
+serving traffic behind TLS is complete. Database and Monitoring are documented with the
+decisions already made and what they attach to. I'd rather ship a deliberate foundation
+than a broad `apply` that works by accident.
 
 ---
 
@@ -35,8 +37,8 @@ exposed to it?**
        │  plain HTTP :8080, inside the VPC
        ▼
   PRIVATE SUBNETS (AZ-a, AZ-b) ─────────────────── COMPUTE
-    ECS Fargate tasks — no public IP
-       │  :5432, security-group-locked
+    ECS Fargate tasks — no public IP        ◄── image pulled from ECR
+       │  :5432, security-group-locked          via the NAT gateway
        ▼
   PRIVATE SUBNETS ──────────────────────────────── DATABASE
     RDS PostgreSQL — reachable only from the tasks
@@ -216,50 +218,152 @@ infrastructure that looked more impressive and did less.
 | No variable defaults | Convenient defaults | Environment-shaping choices stay visible |
 | Validation blocks | Let AWS reject it | Fails at plan time, free, not mid-apply |
 
-### Rough edges I'm tracking
+### Rough edges — since closed
 
-- **No access-log bucket.** The ALB writes to `${app_name}-alb-logs`
-  ([`main.tf:71-73`](networking/main.tf#L71-L73)) but nothing creates it or grants the ELB
-  service write access — so this module can't apply cleanly yet.
-- **`app_port` is a variable; the server hardcodes `:8080`**
-  ([`server.go:200`](../server/server-init/server.go#L200)). Any other value health-checks a
-  dead port. Either the server reads it from the environment or the variable stops
-  pretending to be configurable.
-- **`outputs.tf` is empty** — and it's what blocks section 2.
-- **Tags are inconsistent.** The VPC merges caller tags
-  ([`main.tf:25-31`](networking/main.tf#L25-L31)); the ALB hardcodes
-  `Environment = "Development"`. Breaks cost allocation.
+The four gaps this section used to list are all fixed, and how they were fixed is the more
+useful documentation:
+
+- **The access-log bucket now exists.** [`main.tf:44`](networking/main.tf#L44) provisions it
+  with the ELB service policy attached, and the ALB `depends_on` it
+  ([`main.tf:89`](networking/main.tf#L89)) so the listener can't come up before the bucket
+  it logs to. `alb_logs_force_destroy` defaults to false: a destroy fails loudly on a bucket
+  that still holds logs rather than silently emptying it.
+- **`app_port` is no longer a lie.** The server reads `PORT`
+  ([`server.go:203-213`](../server/server-init/server.go#L203-L213)) and compute injects it
+  from the same variable the target group health-checks. A malformed value is rejected at
+  startup rather than falling back, because binding the wrong port surfaces as an
+  unexplained health-check loop instead of an error.
+- **`outputs.tf` is filled** — ten outputs, and they're what made sections 2 and 3
+  possible. Subnet outputs are named `_ids` while the input variables of the same shape
+  carry CIDRs, so `private_subnet_ids = module.networking.private_subnets` can't read like
+  a mistake at the call site.
+- **Tags are consistent.** Every resource in the module now carries `local.tags`, and ECR
+  and Compute use the identical shape so a cost report groups all three layers by the same
+  keys.
 
 ---
 
-## 2 · Compute
+## 2 · ECR
 
-**Planned.** ECS Fargate cluster, ECR registry, task definition, service, IAM roles.
+**Built.** [`ecr/`](ecr/) — the registry the task pulls its image from.
+
+**Why it's a separate module from Compute.** A repository holds build artifacts that
+outlive any particular deployment. `terraform destroy` on the service shouldn't take the
+images with it, and the repository has to exist *and already contain an image* before an
+ECS service can start a task — fold them into one apply and the service's first create
+races an empty repository and fails the pull. Splitting them makes that ordering explicit
+instead of a race you rediscover at 2am.
+
+**`IMMUTABLE` tags.** A tag, once pushed, permanently refers to the same bytes. That's what
+makes a rollback trustworthy: redeploying a known-good tag gets the image that tag was
+*tested against*, not whatever was pushed over it since. The cost is real — CI can't push a
+moving `:latest`, so images are tagged by commit SHA or version.
+
+**A lifecycle policy, because storage bills forever.** Two rules
+([`main.tf:56-83`](ecr/main.tf#L56-L83)): expire untagged images after 7 days (they're
+layers orphaned by a re-push, referenced by nothing, billed per GB-month like everything
+else), then keep only the 30 most recent. Rules evaluate in priority order and an image
+matched by one is not considered by any later rule, which is why the `tagStatus = "any"`
+catch-all has to sit last.
+
+The policy is *required* rather than optional here: the upstream module sets
+`create_lifecycle_policy = true` by default but leaves the document empty, and AWS rejects
+an empty policy at apply time.
+
+**One sizing trap worth knowing:** `max_image_count` must stay comfortably above your
+rollback window. The rule deletes by age, and a Fargate task re-pulls its image on restart
+— so expiring the image a *running* service uses breaks that task's next start, not just
+the rollback.
+
+---
+
+## 3 · Compute
+
+**Built.** [`compute/`](compute/) — ECS Fargate cluster, service, task definition, and the
+security group rules that connect it to everything else.
 
 **Fargate over EC2** — ECS on EC2 means patching and scaling instances that exist only to
-host containers. For a few small stateless tasks, that's work with no payoff.
-**Two tasks, one per AZ**, for the same reason as two AZs, and so ECS can replace one at a
-time behind the ALB. **Private subnets, no public IP** — the task security group accepts
-traffic only from the *ALB's security group*, referenced by group ID rather than CIDR so it
-stays correct if subnet ranges change.
+host containers. For a few small stateless tasks, that's work with no payoff. **Private
+subnets, `assign_public_ip = false`** — the task is reachable only through the load
+balancer, while outbound still works via the NAT gateway, which is how the image gets
+pulled from ECR and how the app reaches S3.
 
 None of that works without the app being stateless, which it already is: metadata in
 Postgres, file bytes never touching the server, sessions cached client-side. That's what
 makes a task safe to kill and replace at any moment.
 
-**Needs from Networking:** `vpc_id`, `private_subnets`, the target group ARN, and the ALB
-security group ID — the four reasons [`outputs.tf`](networking/outputs.tf) has to be filled
-in first.
+### 3.1 · The rules the upstream module doesn't write for you
 
-**Still to decide:** ECS `stopTimeout` must sit between the server's 10s graceful shutdown
-([`server.go:214-219`](../server/server-init/server.go#L214-L219)) and the target group's
-30s drain. Secrets (`JWT_SECRET`, the DSN) must come from Secrets Manager, never plaintext
-env vars — those are visible to anyone with `ecs:DescribeTaskDefinition`. Autoscaling once
-there's traffic to size against.
+The ECS module creates a task security group but adds **no rules** — both rule maps default
+to `{}`. Left empty, the ALB can't reach the task, health checks never pass, and the task
+can't pull its own image. So ingress is one rule
+([`main.tf:77-88`](compute/main.tf#L77-L88)) allowing the app port from
+`referenced_security_group_id` — the ALB's security group **by ID, not CIDR**, so it stays
+correct if subnet ranges change and nothing else in the VPC can open a connection.
+
+Egress stays wide (`0.0.0.0/0`) by necessity: ECR, CloudWatch Logs, and S3 are public
+endpoints reached through the NAT gateway. VPC endpoints would let this narrow to the VPC
+CIDR the way the ALB's egress does — worth doing once traffic justifies the per-endpoint
+hourly cost. Documented as a deliberate gap rather than left to look accidental.
+
+### 3.2 · Spot capacity without a zero-task failure mode
+
+```hcl
+default_capacity_provider_strategy = {
+  FARGATE      = { base = var.on_demand_base, weight = var.on_demand_weight }
+  FARGATE_SPOT = { weight = var.spot_weight }
+}
+```
+
+`base` is the number of tasks pinned to a provider **before** weight applies; weight only
+splits what's left. `base = 1` keeps one task on capacity AWS can't reclaim, so a Spot
+interruption can never take the service to zero. Spot is roughly 70% cheaper but AWS can
+reclaim a task with two minutes' notice — this buys most of the discount without betting
+availability on it.
+
+The registry example uses `base = 20`, which sends the first twenty tasks to on-demand. At
+a two-task scale that means `FARGATE_SPOT` would never run at all — a copied default that
+silently does nothing.
+
+### 3.3 · Three numbers that have to agree
+
+The most satisfying part of this layer is a chain that was previously three
+near-misses:
+
+| Value | Where | Why |
+| --- | --- | --- |
+| 10s | server's graceful shutdown ([`server.go`](../server/server-init/server.go)) | drains in-flight requests |
+| 20s | `stop_timeout` ([`main.tf:137`](compute/main.tf#L137)) | SIGTERM → SIGKILL window |
+| 30s | target group `deregistration_delay` (networking) | ALB stops sending new requests |
+
+`stop_timeout` must sit **between** the other two. The upstream module defaults it to 120,
+which strands a container for 90 seconds after both the app and the load balancer are
+finished with it — lengthening every single deploy for nothing.
+
+The same closing-the-loop applies to the port: the target group health-checks `app_port`,
+the port mapping advertises it, and the container definition injects it as `PORT`
+([`main.tf:111-114`](compute/main.tf#L111-L114)) so the server actually binds it. Before
+this, `app_port` was three places agreeing on a number the process ignored.
+
+### 3.4 · Costs pinned rather than inherited
+
+**Container Insights is set explicitly** to `disabled` — the upstream module turns it on by
+default and it bills per metric collected. It should be a decision, not something inherited.
+**Log retention is 14 days**, matched deliberately to networking's `alb_log_retention_days`
+so an incident spanning both layers has request logs and application logs covering the same
+window. **Secrets resolve by ARN** through `task_exec_secret_arns`, never as plaintext
+environment variables — those are readable by anyone holding
+`ecs:DescribeTaskDefinition`.
+
+**Still open here:** `readonly_root_filesystem` defaults to true (stricter than AWS's own
+default), but it's a runtime failure rather than a plan error — a binary that writes to disk
+crashes on first write, so it needs confirming against the real container.
+[`compute/outputs.tf`](compute/outputs.tf) is still empty; CI will need the cluster and
+service names to force a new deployment.
 
 ---
 
-## 3 · Database
+## 4 · Database
 
 **Planned.** RDS PostgreSQL, DB subnet group, security group.
 
@@ -276,16 +380,18 @@ than a default. Sizing needs real traffic.
 
 ---
 
-## 4 · Monitoring
+## 5 · Monitoring
 
 **Planned.** CloudWatch alarms and log groups, wired to SNS.
 
 **Alarm on symptoms first.** The ALB's 5XX rate measures what users actually experience;
-CPU matters, but a service can fail every request at 10% CPU. **Log retention must be
-finite** — container logs default to never expiring, which is a bill that grows forever for
-data nobody reads past week one. And the health check from 1.5 is already load-bearing, so
-monitoring's job is to notice the self-healing *happened* — otherwise it's
-indistinguishable from quiet degradation.
+CPU matters, but a service can fail every request at 10% CPU. And the health check from 1.5
+is already load-bearing, so monitoring's job is to notice the self-healing *happened* —
+otherwise it's indistinguishable from quiet degradation.
+
+Log retention is already handled where the logs are produced: 14 days on both the ALB
+access logs and the container logs, matched so an incident spanning both layers has the
+same window of each. What's missing is the alarms.
 
 **Open:** thresholds need a baseline first (alarms set before you know normal either never
 fire or fire constantly, and the second trains you to ignore them), and Gin's default log
@@ -293,16 +399,28 @@ format should become JSON to make Insights queries useful.
 
 ---
 
-## 5 · Cross-cutting
+## 6 · Cross-cutting
 
-- **Remote state — not configured.** State is on local disk. It needs S3 with DynamoDB
-  locking before a second person or a CI job can safely apply. This is the highest-priority
-  gap here, because every layer added inherits the risk.
-- **Tagging — partly done.** The VPC merges baseline and caller tags correctly; the ALB
-  doesn't. See the Networking rough edges.
-- **Secrets — app side only.** The server reads `JWT_SECRET`, the DSN, and AWS credentials
-  from the environment and fails loudly when they're missing. Sourcing them from Secrets
-  Manager arrives with Compute.
+- **Remote state — still not configured.** State is on local disk. It needs S3 with
+  DynamoDB locking before a second person or a CI job can safely apply. This is now the
+  highest-priority gap in the directory by some distance, because every layer added
+  inherits the risk and there are three of them.
+- **Tagging — done.** All three modules build `local.tags` the same way: a
+  `Terraform`/`Environment` baseline merged under caller-supplied tags. Identical shape
+  across layers so a cost report groups them by the same keys.
+- **Version pinning — done, with a caveat worth stating.** Every module pins its provider
+  (`~> 6.0`) and its Terraform floor (`>= 1.9`, where a validation block may reference
+  another variable). But `.terraform.lock.hcl` locks *providers only* — registry module
+  versions aren't captured by it, so the `version` argument on each module block is the
+  only thing stopping a later `terraform init` from resolving a different major release.
+- **Secrets — wired, not yet populated.** Compute accepts `task_exec_secret_arns` so the
+  task definition resolves secrets by ARN, and `container_environment` is documented as
+  the wrong place for them. Creating the actual Secrets Manager entries for `JWT_SECRET`
+  and the database DSN lands with the Database layer.
+- **No root module yet.** Each layer is applied on its own and wired by hand through
+  outputs. A root composition that passes `module.networking.private_subnet_ids` into
+  compute is the natural next step, and it's what makes the dependency order enforceable
+  rather than remembered.
 
 ---
 
@@ -310,5 +428,12 @@ The through-line: a compromise should have somewhere to stop. Containers sit in 
 with no route to the internet, behind a load balancer that can talk to nothing but them, in
 front of a database that accepts connections from nothing but those containers.
 Certificates issue and renew through a dependency chain that can't run out of order. The
-health check asks the same question the application does. And the two expensive ways to
-misconfigure the network fail at plan time with messages that name the fix.
+health check asks the same question the application does. And the expensive ways to
+misconfigure this fail at plan time with messages that name the fix.
+
+The second through-line, visible now that three layers exist: **the upstream defaults are
+usually the bug.** An empty ECR lifecycle policy that AWS rejects, an ECS security group
+with no rules, `base = 20` on a two-task service, a 120-second stop timeout, Container
+Insights billing quietly by default, logs that never expire. Every one of those applies
+cleanly and looks fine in a plan. Most of the work in these modules was reading what the
+module does when you don't tell it anything, and then telling it something.

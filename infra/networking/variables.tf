@@ -89,8 +89,8 @@ variable "https_port" {
 
 variable "alb_log_retention_days" {
   type        = number
-  default     = 90
-  description = "Days to keep ALB access logs before expiring them. Logs accumulate forever otherwise."
+  default     = 14
+  description = "Days to keep ALB access logs before expiring them. Logs accumulate forever otherwise. Matches compute's log_retention_days so an incident spanning both layers has request logs and application logs covering the same window."
 
   validation {
     condition     = var.alb_log_retention_days > 0

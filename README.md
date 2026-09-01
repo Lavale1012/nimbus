@@ -77,8 +77,9 @@ commands, which is what lets the API stay fully stateless.
 ## Infrastructure (AWS, as Terraform IaC)
 
 The AWS environment is defined as code with Terraform — modular, reproducible, and
-version-controlled. The **networking foundation is built**; the compute, database, and
-monitoring layers are designed and documented but not yet applied.
+version-controlled. **Networking, ECR, and compute are built** — the path from an image in
+a registry to a task serving traffic behind TLS is complete. The database and monitoring
+layers are designed and documented but not yet applied.
 
 📖 **[Full walkthrough of the infrastructure and the decisions behind it →](infra/README.md)**
 
@@ -86,14 +87,15 @@ monitoring layers are designed and documented but not yet applied.
   <img src="readmeImages/aws-architecture.jpeg" alt="Nimbus target AWS architecture — nim CLI to ALB to ECS Fargate across two Availability Zones, with RDS PostgreSQL, S3 direct transfers, ECR, NAT Gateway, and CloudWatch/SNS monitoring" width="900">
 </p>
 
-**The four Terraform modules** — `networking`, `compute`, `database`, `monitoring`:
+**The Terraform modules** — `networking`, `ecr`, `compute`, `database`, `monitoring`:
 
 | Layer | Resources | Status |
 | --- | --- | --- |
-| **Networking** | VPC (`10.0.0.0/16`), 2 public + 2 private subnets across 2 AZs, Internet Gateway, NAT Gateway, route tables, Application Load Balancer with HTTP→HTTPS redirect, ACM certificate DNS-validated through Route53 | **Built** |
-| **Compute** | ECS Fargate cluster running **2 API tasks** for high availability (private subnets, no public IPs), ECR image registry, IAM task-execution role, tiered security groups | Planned |
+| **Networking** | VPC (`10.0.0.0/16`), 2 public + 2 private subnets across 2 AZs, Internet Gateway, NAT Gateway, route tables, Application Load Balancer with HTTP→HTTPS redirect, ACM certificate DNS-validated through Route53, access-log bucket | **Built** |
+| **ECR** | Image registry with immutable tags, scan-on-push, and a lifecycle policy that expires untagged layers and caps image count | **Built** |
+| **Compute** | ECS Fargate cluster and service (private subnets, no public IPs), task definition, task security group scoped to the ALB, mixed on-demand/Spot capacity with a guaranteed on-demand base | **Built** |
 | **Database** | RDS PostgreSQL, private DB subnet group, security group locked to **ECS traffic only**, SSL required | Planned |
-| **Monitoring** | CloudWatch alarms on ALB 5XX rate, ECS CPU, and RDS CPU → SNS email notifications; finite container log retention | Planned |
+| **Monitoring** | CloudWatch alarms on ALB 5XX rate, ECS CPU, and RDS CPU → SNS email notifications | Planned |
 
 **Security posture baked into the network:** API tasks get **no public IP** and live in
 private subnets — the only inbound path is `Internet → ALB → ECS on :8080`, and the
@@ -225,8 +227,8 @@ cd client && go build -o nim cli/main.go
 | Database | PostgreSQL · GORM (RDS in production) |
 | File Storage | AWS S3 · LocalStack for local dev (presigned URLs) |
 | Session Cache | Redis |
-| Compute | AWS ECS Fargate (2 tasks, HA) behind an ALB — *planned* |
-| Infrastructure | Terraform — VPC, NAT, ALB, ACM (built) · Fargate, RDS, CloudWatch (planned) |
+| Compute | AWS ECS Fargate behind an ALB, mixed on-demand/Spot capacity |
+| Infrastructure | Terraform — VPC, NAT, ALB, ACM, ECR, Fargate (built) · RDS, CloudWatch (planned) |
 | CI/CD | GitHub Actions — lint, race-tested tests, build, govulncheck, gitleaks |
 | Local Dev | Docker Compose (PostgreSQL + LocalStack S3) |
 
@@ -249,15 +251,15 @@ Done:
 - Live progress bars and spinners on all CLI commands
 - Comprehensive server-side tests (handlers, auth, file ops, box ops)
 - ALB-ready server — trusted proxy headers, CORS config, HTTP timeouts
-- AWS networking foundation as Terraform IaC — VPC across 2 AZs, NAT, ALB, automatic TLS
-  ([walkthrough](infra/README.md))
+- AWS infrastructure as Terraform IaC — VPC across 2 AZs, NAT, ALB with automatic TLS, ECR
+  with an image lifecycle policy, and ECS Fargate ([walkthrough](infra/README.md))
 - CI/CD pipeline gating every PR (see [.github/workflows/README.md](.github/workflows/README.md))
 
 Planned:
 
-- Compute, database, and monitoring Terraform modules — designed and documented in the
+- Database and monitoring Terraform modules — designed and documented in the
   [infrastructure walkthrough](infra/README.md), not yet applied
-- S3 + DynamoDB remote state backend
+- S3 + DynamoDB remote state backend, and a root module composing the layers
 - File versioning
 - Sharing and collaboration
 - Cross-platform build scripts and releases

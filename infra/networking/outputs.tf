@@ -16,12 +16,17 @@ output "vpc_cidr_block" {
   value       = module.vpc.vpc_cidr_block
 }
 
-output "private_subnets" {
+# Named _ids, unlike the variables of the same shape above, because these carry
+# subnet IDs while var.private_subnets / var.public_subnets carry CIDR blocks.
+# One name for both would make `private_subnet_ids = module.networking.private_subnets`
+# at the call site read like a mistake.
+
+output "private_subnet_ids" {
   description = "Private subnet IDs. ECS tasks and RDS go here; no route to the internet gateway."
   value       = module.vpc.private_subnets
 }
 
-output "public_subnets" {
+output "public_subnet_ids" {
   description = "Public subnet IDs. Only the load balancer and NAT gateway belong here."
   value       = module.vpc.public_subnets
 }
