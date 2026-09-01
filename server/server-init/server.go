@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +27,10 @@ import (
 	"github.com/nimbus/api/utils"
 	"gorm.io/gorm"
 )
+
+// defaultPort is used when PORT is unset, which is the local-dev and
+// docker-compose case. In ECS the task definition always injects it.
+const defaultPort = "8080"
 
 // S3 and DB are package-level singletons shared across all request handlers.
 var S3 *s3.Client
@@ -194,10 +199,25 @@ func InitServer() error {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Port to bind. The Terraform target group health-checks this port and the
+	// ECS container definition advertises it, so all three have to agree — a
+	// hardcoded value here makes the infrastructure's app_port variable a lie
+	// and every task fails its health check. A malformed value is rejected
+	// rather than quietly falling back, since binding the wrong port surfaces
+	// as an unexplained health-check loop instead of a startup error.
+	port := defaultPort
+	if v, err := utils.GetEnv("PORT"); err == nil {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("PORT %q is not a valid port number", v)
+		}
+		port = v
+	}
+
 	// Configure HTTP server timeouts.
 	// WriteTimeout is generous (300s) to accommodate large file presign operations.
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 300 * time.Second,
