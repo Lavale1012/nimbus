@@ -17,6 +17,30 @@ locals {
   # disagree — family "postgres16" against engine_version "17" — AWS rejects it
   # mid-apply, after the subnet group and security group already exist.
   family = coalesce(var.family, "postgres${split(".", var.engine_version)[0]}")
+
+  # Parameters this module guarantees, ahead of anything the caller adds.
+  #
+  # These are concatenated rather than defaulted into var.parameters because a
+  # Terraform list default is replaced wholesale, not merged: a caller adding
+  # one unrelated setting would silently drop everything here, the plan would
+  # show nothing unusual, and the apply would succeed. TLS enforcement would
+  # disappear without anyone deciding to remove it.
+  required_parameters = [
+    {
+      # Refuses any connection that is not using TLS. The application pays a
+      # connection parameter; the alternative is credentials and file metadata
+      # crossing the VPC in the clear. This is the only thing enforcing that —
+      # the server takes DATABASE_URL verbatim — so it is not left overridable.
+      name  = "rds.force_ssl"
+      value = "1"
+      # Static parameter: it takes effect on reboot, not on apply. Left as
+      # "immediate" the plan succeeds and the setting silently does nothing
+      # until the next restart.
+      apply_method = "pending-reboot"
+    },
+  ]
+
+  parameters = concat(local.required_parameters, var.parameters)
 }
 
 ################################################################################
@@ -146,7 +170,7 @@ module "db" {
 
   create_db_parameter_group = true
   family                    = local.family
-  parameters                = var.parameters
+  parameters                = local.parameters
 
   # PostgreSQL does not support option groups — they exist for MySQL, MariaDB,
   # Oracle and SQL Server. The module creates one by default, so this must be

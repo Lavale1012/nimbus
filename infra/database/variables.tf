@@ -248,22 +248,13 @@ variable "parameters" {
     value        = string
     apply_method = optional(string)
   }))
+  default     = []
+  description = "Additional parameter group entries, appended to the ones this module requires (see local.required_parameters in main.tf). TLS enforcement is not in this list and cannot be removed through it."
 
-  default = [
-    {
-      # Refuses any connection that is not using TLS. The application pays a
-      # connection parameter; the alternative is credentials and file metadata
-      # crossing the VPC in the clear.
-      name  = "rds.force_ssl"
-      value = "1"
-      # Static parameter: it takes effect on reboot, not on apply. Left as
-      # "immediate" the plan succeeds and the setting silently does nothing
-      # until the next restart.
-      apply_method = "pending-reboot"
-    },
-  ]
-
-  description = "Parameter group entries. Defaults to requiring TLS on every connection."
+  validation {
+    condition     = !contains([for p in var.parameters : lower(p.name)], "rds.force_ssl")
+    error_message = "rds.force_ssl is enforced by this module and cannot be set through var.parameters — it is the only thing requiring TLS between the tasks and the database, since the server uses DATABASE_URL verbatim. If it genuinely has to change, edit local.required_parameters in main.tf so the decision shows up in a diff and a review."
+  }
 }
 
 ################################################################################

@@ -5,6 +5,8 @@ package postgres
 import (
 	"fmt"
 	"log"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/nimbus/api/models"
@@ -24,6 +26,65 @@ const (
 	connMaxIdleTime = 5 * time.Minute
 )
 
+// sslModes libpq treats as "encrypt, and fail if that isn't possible". Every
+// other value, including the empty string — which libpq reads as "prefer" —
+// falls back to an unencrypted connection without reporting an error.
+var tlsRequiredSSLModes = map[string]bool{
+	"require":     true,
+	"verify-ca":   true,
+	"verify-full": true,
+}
+
+// sslModeFrom extracts sslmode from a DSN in either form libpq accepts: the URL
+// form (postgres://user:pass@host/db?sslmode=require) or the keyword/value form
+// (host=... sslmode=require). Returns "" when the DSN sets no sslmode, and also
+// when the DSN can't be parsed — an unreadable DSN is treated as "not proven to
+// require TLS" rather than assumed safe.
+func sslModeFrom(dsn string) string {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return ""
+		}
+		return u.Query().Get("sslmode")
+	}
+	for _, field := range strings.Fields(dsn) {
+		key, value, found := strings.Cut(field, "=")
+		if found && strings.EqualFold(key, "sslmode") {
+			return strings.Trim(value, `'"`)
+		}
+	}
+	return ""
+}
+
+// checkTLS rejects a DSN that would let the connection fall back to plaintext.
+//
+// Defence in depth for the database layer: RDS enforces rds.force_ssl in its
+// parameter group, but that lives in a different repo directory and a different
+// apply. This makes the server refuse to start rather than silently sending the
+// master credential over the network in the clear if the two ever disagree.
+//
+// LOCAL_DEV is exempt: docker-compose runs Postgres in a container with no
+// certificate, so its DSN sets sslmode=disable.
+func checkTLS(dsn string, localDev bool) error {
+	if localDev {
+		return nil
+	}
+	// Only the mode is ever echoed. The DSN itself holds the password.
+	mode := strings.ToLower(strings.TrimSpace(sslModeFrom(dsn)))
+	if tlsRequiredSSLModes[mode] {
+		return nil
+	}
+	if mode == "" {
+		return fmt.Errorf("DATABASE_URL sets no sslmode and LOCAL_DEV is not true: " +
+			"libpq would treat this as \"prefer\" and silently accept an unencrypted " +
+			"connection. Set sslmode to require, verify-ca, or verify-full")
+	}
+	return fmt.Errorf("DATABASE_URL sets sslmode=%q and LOCAL_DEV is not true: "+
+		"this permits an unencrypted connection to the database. Set sslmode to "+
+		"require, verify-ca, or verify-full", mode)
+}
+
 // Connect reads DATABASE_URL from the environment, opens a GORM connection,
 // and automatically creates/updates all tables to match the current model
 // definitions. Returns the ready-to-use *gorm.DB handle.
@@ -32,6 +93,15 @@ func Connect() (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get DATABASE_URL from environment: %w", err)
 	}
+
+	// Checked before the connection is opened, so a misconfigured deployment
+	// fails at startup instead of after the first credential has crossed the
+	// network unencrypted.
+	localDev, _ := utils.GetEnv("LOCAL_DEV")
+	if err := checkTLS(dsn, localDev == "true"); err != nil {
+		return nil, err
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
