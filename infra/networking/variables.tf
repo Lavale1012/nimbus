@@ -1,3 +1,7 @@
+# As in the other modules: environment-shaping choices carry no default, so the
+# decision stays in the caller's config. Defaults appear only where the value is
+# a safe floor or the protective option.
+
 variable "app_name" {
   type        = string
   description = "name of app name."
@@ -7,6 +11,15 @@ variable "environment" {
   type        = string
   description = "Deployment environment the VPC belongs to (e.g. dev, staging, prod)."
 }
+
+variable "tags" {
+  type        = map(string)
+  description = "Additional tags applied to all resources created by the module."
+}
+
+################################################################################
+# VPC
+################################################################################
 
 variable "vpc_cidr" {
   type        = string
@@ -28,6 +41,10 @@ variable "public_subnets" {
   description = "CIDR blocks for the public subnets, one per availability zone."
 }
 
+################################################################################
+# Gateways
+################################################################################
+
 variable "enable_nat_gateway" {
   type        = bool
   description = "Provision NAT gateways so private subnets can reach the internet."
@@ -43,11 +60,11 @@ variable "one_nat_gateway_per_az" {
   default     = false
   description = "Place one NAT gateway in each AZ's public subnet, so a zone's outbound traffic never crosses zones. Requires at least as many public subnets as AZs. Has no effect when single_nat_gateway is true."
 
+  # Also guards against paying for per-AZ NAT gateways that were never created.
   validation {
     condition     = !(var.single_nat_gateway && var.one_nat_gateway_per_az)
     error_message = "single_nat_gateway and one_nat_gateway_per_az are mutually exclusive; single_nat_gateway wins silently, so set it to false to get one NAT per AZ."
   }
-  # Also guards against paying for per-AZ NAT gateways that were never created.
 }
 
 variable "enable_vpn_gateway" {
@@ -55,15 +72,14 @@ variable "enable_vpn_gateway" {
   description = "Provision a VPN gateway for the VPC."
 }
 
-variable "tags" {
-  type        = map(string)
-  description = "Additional tags applied to all resources created by the module."
-}
-
 variable "igw" {
   type        = bool
   description = "Internet gateway"
 }
+
+################################################################################
+# Load balancer
+################################################################################
 
 variable "alb_ingress_cidr_ipv4" {
   type        = string
@@ -104,6 +120,10 @@ variable "alb_logs_force_destroy" {
   description = "Allow the access log bucket to be destroyed while it still holds objects. Leave false outside throwaway environments; a terraform destroy will otherwise fail on the non-empty bucket."
 }
 
+################################################################################
+# DNS
+################################################################################
+
 variable "domain_name" {
   type        = string
   description = "Domain name for the ACM certificate, and the name pointed at the load balancer."
@@ -114,6 +134,10 @@ variable "hosted_zone_name" {
   description = "Route53 public hosted zone holding the DNS validation records, e.g. nimbuscli.us."
 }
 
+################################################################################
+# Target group and health check
+################################################################################
+
 variable "app_port" {
   type        = number
   description = "Port the API server listens on, used as the target group port."
@@ -123,11 +147,11 @@ variable "target_group_name_prefix" {
   type        = string
   description = "Prefix AWS builds the target group name from. Six characters maximum."
 
+  # AWS rejects a longer prefix at apply time, so catch it during plan.
   validation {
     condition     = length(var.target_group_name_prefix) <= 6
     error_message = "Target group name_prefix must be 6 characters or fewer."
   }
-  # AWS rejects a longer prefix at apply time, so catch it during plan.
 }
 
 variable "health_check" {

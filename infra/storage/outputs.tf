@@ -1,7 +1,6 @@
-# What the other layers consume. Compute needs the bucket name for the S3_BUCKET
-# environment variable and the policy ARN to attach to the ECS task role; without
-# that attachment every presigned upload and download returns 403, because a
-# presigned URL carries only the authority the signer already had.
+# What the other layers consume. Compute needs the bucket name for S3_BUCKET
+# and the policy ARN to attach to the ECS task role — without that attachment
+# every presigned upload and download returns 403.
 
 ################################################################################
 # Bucket

@@ -1,7 +1,6 @@
-# Same principle as networking/variables.tf and compute/variables.tf:
-# environment-shaping choices carry no default, so the decision lives in the
-# caller's config where a human reviews it. Defaults appear only where the value
-# is a safe floor, a fixed constant, or the protective option.
+# As in networking/ and compute/: environment-shaping choices carry no default,
+# so the decision stays in the caller's config. Defaults appear only where the
+# value is a safe floor, a fixed constant, or the protective option.
 
 variable "app_name" {
   type        = string
@@ -21,8 +20,8 @@ variable "tags" {
 ################################################################################
 # From the networking layer
 #
-# Passed as variables rather than read from remote state, so this module stays
-# testable on its own and the dependency is explicit at the call site.
+# Passed as variables rather than read from remote state, so the module stays
+# testable alone and the dependency is explicit at the call site.
 ################################################################################
 
 variable "vpc_id" {

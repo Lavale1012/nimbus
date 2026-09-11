@@ -1,5 +1,5 @@
-# Same principle as the other modules: environment-shaping choices carry no
-# default, so the decision lives in the caller's config where a human reviews it.
+# As in the other modules: environment-shaping choices carry no default, so the
+# decision stays in the caller's config.
 
 variable "app_name" {
   type        = string
@@ -63,8 +63,8 @@ variable "read_access_arns" {
 ################################################################################
 # Lifecycle policy
 #
-# Without these rules a repository grows forever at per-GB-month pricing — the
-# same failure mode as log retention in networking/ and compute/.
+# Without these rules the repository grows forever at per-GB-month pricing —
+# the same failure mode as log retention in networking/ and compute/.
 ################################################################################
 
 variable "untagged_expire_days" {

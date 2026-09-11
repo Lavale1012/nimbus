@@ -1,6 +1,5 @@
-# Baseline tags every resource in this module carries, overridable per-caller
-# via var.tags. Defined once so the ALB and the log bucket can't drift from
-# the VPC the way hardcoded tags did.
+# Defined once so the ALB and the log bucket can't drift from the VPC the way
+# hardcoded tags did.
 locals {
   tags = merge(
     {
@@ -11,8 +10,12 @@ locals {
   )
 }
 
-# Network foundation: VPC, subnets across two AZs, and the gateways that
-# connect them to the internet.
+################################################################################
+# Network foundation
+#
+# VPC, subnets across two AZs, and the gateways connecting them to the internet.
+################################################################################
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 6.7.0"
@@ -20,35 +23,41 @@ module "vpc" {
   name = var.app_name
   cidr = var.vpc_cidr
 
-  # Subnet lists are zipped against azs by position, so all three must be
-  # the same length. Public subnets host the ALB, private ones the ECS tasks.
+  # Zipped against azs by position, so all three must be the same length.
+  # Public subnets host the ALB, private ones the ECS tasks.
   azs             = var.azs
   private_subnets = var.private_subnets
   public_subnets  = var.public_subnets
 
-  enable_nat_gateway = var.enable_nat_gateway # outbound internet for private subnets
-  # One shared NAT, landing in the first public subnet (azs[0]). Every private
-  # route table points at it, so that AZ going down cuts outbound for both.
-  single_nat_gateway = var.single_nat_gateway
-  # Set instead of single_nat_gateway to get a NAT per AZ; the two conflict.
+  # Outbound internet for the private subnets. single_nat_gateway puts one NAT
+  # in the first public subnet (azs[0]) and points every private route table at
+  # it, so that AZ going down cuts outbound for both; one_nat_gateway_per_az is
+  # the per-AZ alternative, and the two conflict.
+  enable_nat_gateway     = var.enable_nat_gateway
+  single_nat_gateway     = var.single_nat_gateway
   one_nat_gateway_per_az = var.one_nat_gateway_per_az
-  enable_vpn_gateway     = var.enable_vpn_gateway
-  create_igw             = var.igw # inbound internet for public subnets
+
+  enable_vpn_gateway = var.enable_vpn_gateway
+  create_igw         = var.igw # inbound internet for the public subnets
 
   tags = local.tags
 }
 
-# Destination for ALB access logs. The load balancer cannot be created until
-# this bucket exists AND carries a policy letting the log delivery service
-# write to it — AWS verifies delivery up front and fails the create otherwise.
+################################################################################
+# Access logs
+#
+# The load balancer cannot be created until this bucket exists AND carries a
+# log-delivery policy — AWS verifies delivery up front and fails the create.
+################################################################################
+
 module "alb_logs" {
   source  = "terraform-aws-modules/s3-bucket/aws"
   version = "~> 5.15.0"
 
   bucket = "${var.app_name}-alb-logs"
 
-  # Writes the log-delivery policy for ALB/NLB. The correct principal differs
-  # by region age, so this is left to the module rather than hand-rolled.
+  # Writes the ALB/NLB log-delivery policy. The correct principal differs by
+  # region age, so it is left to the module rather than hand-rolled.
   attach_lb_log_delivery_policy = true
 
   # The module blocks all public access by default, so that is left alone.
@@ -63,8 +72,8 @@ module "alb_logs" {
     }
   }
 
-  # Access logs accumulate forever by default; this is a bill that grows for
-  # data nobody reads past the incident it was needed for.
+  # Access logs accumulate forever by default — a bill that grows for data
+  # nobody reads past the incident.
   lifecycle_rule = [
     {
       id      = "expire-access-logs"
@@ -78,21 +87,25 @@ module "alb_logs" {
   tags = local.tags
 }
 
-# Public-facing load balancer. Terminates TLS and forwards to ECS tasks.
+################################################################################
+# Load balancer
+#
+# Public-facing. Terminates TLS and forwards to the ECS tasks.
+################################################################################
+
 module "alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "~> 10.5.0"
 
-  # s3_bucket_id resolves from the bucket, not the bucket policy, so referencing
-  # it alone would let Terraform build the ALB before the policy is attached and
-  # fail intermittently. Depending on the whole module waits for both.
+  # s3_bucket_id resolves from the bucket, not the policy, so referencing it
+  # alone lets Terraform build the ALB before the policy attaches and fail
+  # intermittently. Depending on the whole module waits for both.
   depends_on = [module.alb_logs]
 
   name    = "${var.app_name}-alb"
   vpc_id  = module.vpc.vpc_id
   subnets = module.vpc.public_subnets # internet-reachable
 
-  # Security Group
   # Each map entry becomes one SG rule. Keys are Terraform labels only;
   # renaming one destroys and recreates that rule.
   security_group_ingress_rules = {
@@ -111,8 +124,8 @@ module "alb" {
       cidr_ipv4   = var.alb_ingress_cidr_ipv4
     }
   }
-  # Narrows the AWS default of all-outbound-anywhere: "-1" is every protocol,
-  # but only to the VPC, so the ALB can reach its targets and nothing else.
+  # Narrows AWS's all-outbound-anywhere default: "-1" is every protocol, but
+  # only to the VPC, so the ALB reaches its targets and nothing else.
   security_group_egress_rules = {
     all = {
       ip_protocol = "-1"
@@ -131,9 +144,11 @@ module "alb" {
       port     = var.http_port
       protocol = "HTTP"
       redirect = {
-        port        = tostring(var.https_port) # redirect target is a string, unlike port above
+        # tostring because the redirect target is a string, unlike port above.
+        # 301 is permanent, so browsers stop retrying the HTTP port.
+        port        = tostring(var.https_port)
         protocol    = "HTTPS"
-        status_code = "HTTP_301" # permanent, so browsers stop retrying the HTTP port
+        status_code = "HTTP_301"
       }
     }
     # TLS terminates here, then plaintext to the target group.
@@ -150,19 +165,22 @@ module "alb" {
 
   target_groups = {
     ecs_task = {
-      # AWS appends a random suffix; the prefix is capped at 6 characters.
-      name_prefix                       = var.target_group_name_prefix
-      protocol                          = "HTTP" # ALB to task, inside the VPC
-      port                              = var.app_port
-      target_type                       = "ip" # ECS registers task IPs, not instance IDs
-      deregistration_delay              = 30   # seconds to drain before removing a task
-      load_balancing_cross_zone_enabled = true # spread traffic across both AZs
+      # name_prefix is capped at 6 characters; AWS appends a random suffix.
+      # HTTP because this hop is ALB to task, inside the VPC. target_type "ip"
+      # because ECS registers task IPs rather than instance IDs.
+      name_prefix = var.target_group_name_prefix
+      protocol    = "HTTP"
+      port        = var.app_port
+      target_type = "ip"
+
+      deregistration_delay              = 30   # seconds to drain before removal
+      load_balancing_cross_zone_enabled = true # spread across both AZs
 
       # Failing targets get pulled from rotation, so path must return 200.
       health_check = {
         enabled             = true
         protocol            = "HTTP"
-        port                = "traffic-port" # follows the target group port above
+        port                = "traffic-port" # follows the target group port
         path                = var.health_check.path
         matcher             = var.health_check.matcher
         interval            = var.health_check.interval
@@ -176,8 +194,13 @@ module "alb" {
   tags = local.tags
 }
 
-# TLS certificate for the HTTPS listener. Issued in PENDING_VALIDATION and
-# stays unusable until the DNS records below prove domain ownership.
+################################################################################
+# TLS certificate
+#
+# Issued in PENDING_VALIDATION and unusable until the DNS records below prove
+# domain ownership.
+################################################################################
+
 resource "aws_acm_certificate" "this" {
   domain_name       = var.domain_name
   validation_method = "DNS"
@@ -218,20 +241,24 @@ resource "aws_acm_certificate_validation" "this" {
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
-# Points the domain at the load balancer. The certificate above only proves
-# ownership of the name; without this record the name resolves nowhere.
+################################################################################
+# DNS
 #
-# Deliberately a second, separate call rather than folding the validation
-# records above into this one: those records gate the certificate, the
-# certificate gates the HTTPS listener, and this record reads the ALB those
-# listeners belong to. One module holding both halves would close that chain
-# into a dependency cycle Terraform refuses to plan.
+# Points the domain at the load balancer. The certificate above proves ownership
+# of the name; without this record the name resolves nowhere.
+#
+# Deliberately separate from the validation records: those gate the certificate,
+# the certificate gates the HTTPS listener, and this record reads the ALB those
+# listeners belong to. One module holding both halves closes that chain into a
+# dependency cycle Terraform refuses to plan.
+################################################################################
+
 module "dns_alias" {
   source  = "terraform-aws-modules/route53/aws"
   version = "~> 6.5.0"
 
-  # Look up the existing zone instead of creating one; the domain predates
-  # this infrastructure and a destroy here must not be able to take it down.
+  # Look up the existing zone rather than creating one: the domain predates this
+  # infrastructure and a destroy here must not be able to take it down.
   create_zone = false
   name        = var.hosted_zone_name
 

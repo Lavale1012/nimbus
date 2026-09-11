@@ -1,6 +1,6 @@
-# Same principle as networking/variables.tf: environment-shaping choices carry
-# no default, so the decision lives in the caller's config where a human reviews
-# it. Defaults appear only where the value is a safe floor or a fixed constant.
+# As in networking/variables.tf: environment-shaping choices carry no default,
+# so the decision stays in the caller's config. Defaults appear only where the
+# value is a safe floor or a fixed constant.
 
 variable "app_name" {
   type        = string
@@ -20,9 +20,9 @@ variable "tags" {
 ################################################################################
 # From the networking layer
 #
-# These four are exactly the outputs networking/outputs.tf exists to provide.
-# Passing them as variables rather than reading remote state keeps this module
-# testable on its own and makes the dependency explicit at the call site.
+# Exactly the outputs networking/outputs.tf exists to provide. Passed as
+# variables rather than read from remote state, so the module stays testable
+# alone and the dependency is explicit at the call site.
 ################################################################################
 
 variable "vpc_id" {
@@ -178,8 +178,8 @@ variable "task_egress_cidr_ipv4" {
 # Capacity providers
 #
 # base pins a number of tasks to a provider before weight applies; weight splits
-# only what remains. Getting these backwards is why the registry example's
-# 50/50 split silently runs everything on-demand.
+# only what remains. Getting that backwards is why the registry example's 50/50
+# split silently runs everything on-demand.
 ################################################################################
 
 variable "on_demand_base" {

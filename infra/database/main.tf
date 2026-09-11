@@ -1,6 +1,5 @@
-# Baseline tags every resource in this module carries, overridable per-caller
-# via var.tags. Same shape as networking/local.tags and compute/local.tags so a
-# cost report can group all three layers by the same keys.
+# Same tag shape as networking/local.tags and compute/local.tags so cost reports
+# can group all three layers by the same keys.
 locals {
   tags = merge(
     {
@@ -12,30 +11,27 @@ locals {
 
   identifier = coalesce(var.identifier, "${var.app_name}-db")
 
-  # The parameter group family is derived from the engine version rather than
-  # passed separately. They are the same decision written twice, and when they
-  # disagree — family "postgres16" against engine_version "17" — AWS rejects it
-  # mid-apply, after the subnet group and security group already exist.
+  # Derived from the engine version rather than passed separately: they are one
+  # decision written twice, and when they disagree — family "postgres16"
+  # against engine_version "17" — AWS rejects it mid-apply, after other
+  # resources already exist.
   family = coalesce(var.family, "postgres${split(".", var.engine_version)[0]}")
 
   # Parameters this module guarantees, ahead of anything the caller adds.
   #
-  # These are concatenated rather than defaulted into var.parameters because a
-  # Terraform list default is replaced wholesale, not merged: a caller adding
-  # one unrelated setting would silently drop everything here, the plan would
-  # show nothing unusual, and the apply would succeed. TLS enforcement would
-  # disappear without anyone deciding to remove it.
+  # Concatenated rather than defaulted into var.parameters because a Terraform
+  # list default is replaced wholesale, not merged: a caller adding one
+  # unrelated setting would silently drop TLS enforcement, and the apply would
+  # succeed.
   required_parameters = [
     {
-      # Refuses any connection that is not using TLS. The application pays a
-      # connection parameter; the alternative is credentials and file metadata
-      # crossing the VPC in the clear. This is the only thing enforcing that —
-      # the server takes DATABASE_URL verbatim — so it is not left overridable.
+      # Refuses any connection not using TLS. The server takes DATABASE_URL
+      # verbatim, so this is the only thing enforcing it — hence not
+      # overridable.
       name  = "rds.force_ssl"
       value = "1"
-      # Static parameter: it takes effect on reboot, not on apply. Left as
-      # "immediate" the plan succeeds and the setting silently does nothing
-      # until the next restart.
+      # Static parameter: takes effect on reboot, not on apply. Left "immediate"
+      # the plan succeeds and the setting does nothing until the next restart.
       apply_method = "pending-reboot"
     },
   ]
@@ -46,15 +42,14 @@ locals {
 ################################################################################
 # Security group
 #
-# The database's only inbound path. Built here rather than in networking/ because
-# it is meaningless without the thing it protects, and it references the ECS task
-# security group by ID — not a CIDR, not the VPC range — so the only thing in the
-# account that can open a connection is an API task.
+# The database's only inbound path. Built here, not in networking/, because it
+# is meaningless without the thing it protects. It references the ECS task
+# security group by ID — not a CIDR — so only an API task can connect.
 ################################################################################
 
 resource "aws_security_group" "db" {
-  # name_prefix, not name: a change that forces replacement can build the new
-  # group before destroying the old one, which a fixed name would deadlock on.
+  # name_prefix, not name: a replacement can build the new group before
+  # destroying the old one, which a fixed name would deadlock on.
   name_prefix = "${var.app_name}-db-"
   description = "PostgreSQL access for ${local.identifier}"
   vpc_id      = var.vpc_id
@@ -77,10 +72,9 @@ resource "aws_vpc_security_group_ingress_rule" "db" {
   description                  = "PostgreSQL from ${each.value}"
 }
 
-# No egress rules, deliberately. An RDS instance answers connections; it does not
-# open them. Enhanced Monitoring, Performance Insights and IAM authentication all
-# travel through the RDS service rather than this ENI. A PostgreSQL extension
-# that calls out (aws_s3, postgres_fdw) would need a rule added here.
+# No egress rules, deliberately. RDS answers connections, it does not open them,
+# and Enhanced Monitoring, Performance Insights and IAM auth all travel through
+# the RDS service, not this ENI. An extension that calls out needs a rule here.
 
 ################################################################################
 # The instance
@@ -96,9 +90,8 @@ module "db" {
   engine_version = var.engine_version
   instance_class = var.instance_class
 
-  # Storage starts at allocated_storage and grows on its own up to
-  # max_allocated_storage. Without the ceiling, storage autoscaling is off and a
-  # full disk takes the database down rather than costing a few dollars more.
+  # Storage grows on its own up to max_allocated_storage. Without that ceiling
+  # autoscaling is off, and a full disk takes the database down.
   allocated_storage     = var.allocated_storage
   max_allocated_storage = var.max_allocated_storage
   storage_type          = var.storage_type
@@ -109,10 +102,9 @@ module "db" {
   username = var.username
   port     = var.port
 
-  # No password variable anywhere in this module. RDS generates the credential,
-  # stores it in Secrets Manager, and hands back an ARN — so the password never
-  # passes through a tfvars file, a CI variable, or the state file. The task
-  # definition resolves it by ARN at launch.
+  # No password variable anywhere: RDS generates the credential, stores it in
+  # Secrets Manager, and hands back an ARN, so it never passes through tfvars, a
+  # CI variable, or state. The task definition resolves it by ARN at launch.
   manage_master_user_password   = var.manage_master_user_password
   master_user_secret_kms_key_id = var.master_user_secret_kms_key_id
 
@@ -120,27 +112,23 @@ module "db" {
   # Placement
   ##############################################################################
 
-  # Single-AZ: one instance, in one zone, with no standby. A zone failure means
-  # downtime until AWS restores it or the instance is restored from backup.
-  # Multi-AZ roughly doubles the bill to remove that, which is the same shape of
-  # trade-off as the NAT decision in networking/ and deserves the same explicit
-  # treatment rather than an inherited default.
+  # Single-AZ: one instance, one zone, no standby. A zone failure means downtime
+  # until AWS restores it or the instance is restored from backup. Multi-AZ
+  # roughly doubles the bill to remove that — same trade-off shape as the NAT
+  # decision in networking/, so it is explicit rather than inherited.
   multi_az          = var.multi_az
   availability_zone = var.availability_zone
 
-  # The subnet group still spans every subnet passed in, across both AZs, even
-  # though the instance runs in one of them. That is not a contradiction: RDS
-  # requires a subnet group covering at least two AZs before it will create an
-  # instance at all, and it is what makes converting to Multi-AZ later — or
-  # restoring into the other zone — a change to one variable instead of a rebuild.
+  # The subnet group still spans both AZs even though the instance runs in one:
+  # RDS requires two AZs before it will create an instance at all, and it makes
+  # converting to Multi-AZ later a one-variable change instead of a rebuild.
   create_db_subnet_group = true
   subnet_ids             = var.private_subnet_ids
 
   vpc_security_group_ids = [aws_security_group.db.id]
 
-  # Private subnets have no route to the internet gateway, so this is already
-  # true by placement. Set anyway: it is the flag a reviewer looks for, and the
-  # one that would quietly undo the subnet choice if it ever flipped.
+  # Already true by placement — private subnets have no route to the IGW. Set
+  # anyway: it is the flag a reviewer looks for, and flipping it undoes that.
   publicly_accessible = false
 
   ##############################################################################
@@ -172,18 +160,17 @@ module "db" {
   family                    = local.family
   parameters                = local.parameters
 
-  # PostgreSQL does not support option groups — they exist for MySQL, MariaDB,
-  # Oracle and SQL Server. The module creates one by default, so this must be
-  # off or the apply fails. major_engine_version is omitted for the same reason:
-  # its only consumer is the option group.
+  # PostgreSQL has no option groups — they are a MySQL/MariaDB/Oracle/SQL
+  # Server thing — and the module creates one by default, so this must be off
+  # or the apply fails. major_engine_version is omitted for the same reason.
   create_db_option_group = false
 
   ##############################################################################
   # Observability
   ##############################################################################
 
-  # Ships Postgres logs to CloudWatch, where the monitoring layer can alarm on
-  # them. Without the log group and retention below they would persist forever.
+  # Ships Postgres logs to CloudWatch for the monitoring layer to alarm on.
+  # Without the log group and retention below they would persist forever.
   enabled_cloudwatch_logs_exports        = var.enabled_cloudwatch_logs_exports
   create_cloudwatch_log_group            = true
   cloudwatch_log_group_retention_in_days = var.log_retention_days
@@ -194,8 +181,7 @@ module "db" {
 
   # Enhanced Monitoring is OS-level metrics at sub-minute resolution, billed as
   # CloudWatch Logs ingestion. The role is created only when the interval asks
-  # for it, so a non-zero interval can't be set without the role that makes it
-  # work — the module would otherwise fail at apply.
+  # for it, so a non-zero interval can never be set without it.
   monitoring_interval    = var.monitoring_interval
   create_monitoring_role = var.monitoring_interval > 0
   monitoring_role_name   = "${local.identifier}-monitoring"
@@ -206,9 +192,9 @@ module "db" {
 
   iam_database_authentication_enabled = var.iam_database_authentication_enabled
 
-  # On by default. A delete then fails at the API until someone explicitly turns
-  # this off, which is the point: the destructive step becomes two deliberate
-  # actions instead of one. Note terraform destroy will not get past this.
+  # On by default: a delete fails at the API until someone explicitly turns this
+  # off, making the destructive step two deliberate actions instead of one.
+  # terraform destroy does not get past it either.
   deletion_protection = var.deletion_protection
 
   tags = local.tags

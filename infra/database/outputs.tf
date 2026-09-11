@@ -1,6 +1,5 @@
-# What the other layers consume. Compute needs the endpoint, port and database
-# name to build a DSN, and the master password secret ARN to resolve the
-# credential at task launch without it ever appearing in the task definition.
+# What the other layers consume. Compute builds a DSN from the endpoint, port
+# and database name, and resolves the credential from the secret ARN at launch.
 
 ################################################################################
 # Connection
@@ -36,8 +35,8 @@ output "db_instance_username" {
 # Credentials
 #
 # The password itself is deliberately not an output. RDS writes it to Secrets
-# Manager and this is the ARN the ECS execution role reads it from, which is what
-# keeps it out of the state file and out of the task definition.
+# Manager; this is the ARN the ECS execution role reads it from, which keeps it
+# out of both the state file and the task definition.
 ################################################################################
 
 output "db_instance_master_user_secret_arn" {

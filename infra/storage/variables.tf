@@ -1,6 +1,6 @@
-# Same principle as the other modules: environment-shaping choices carry no
-# default, so the decision lives in the caller's config where a human reviews it.
-# Defaults appear only where the value is a safe floor or the protective option.
+# As in the other modules: environment-shaping choices carry no default, so the
+# decision stays in the caller's config. Defaults appear only where the value is
+# a safe floor or the protective option.
 
 variable "app_name" {
   type        = string

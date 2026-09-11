@@ -1,6 +1,6 @@
-# What the other layers consume. Compute needs the first four to place tasks
-# and register them behind the load balancer; Database needs the VPC and its
-# private subnets to build a subnet group.
+# What the other layers consume. Compute needs the first four to place tasks and
+# register them behind the load balancer; database needs the VPC and its private
+# subnets for a subnet group.
 
 ################################################################################
 # Network
@@ -16,11 +16,9 @@ output "vpc_cidr_block" {
   value       = module.vpc.vpc_cidr_block
 }
 
-# Named _ids, unlike the variables of the same shape above, because these carry
-# subnet IDs while var.private_subnets / var.public_subnets carry CIDR blocks.
-# One name for both would make `private_subnet_ids = module.networking.private_subnets`
-# at the call site read like a mistake.
-
+# Named _ids because these carry subnet IDs while var.private_subnets and
+# var.public_subnets carry CIDR blocks. One name for both would make
+# `private_subnet_ids = module.networking.private_subnets` read like a mistake.
 output "private_subnet_ids" {
   description = "Private subnet IDs. ECS tasks and RDS go here; no route to the internet gateway."
   value       = module.vpc.private_subnets
